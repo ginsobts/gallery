@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 640b9f4ba86e55a46b537f59baf8dee2, type: 3}
+  m_Name: GallerySettings
+  m_EditorClassIdentifier: 
+  ambientBrightness: 0.3
+  ambientColor: {r: 0.15, g: 0.15, b: 0.25, a: 1}
+  flashlightRadius: 3
+  flashlightColor: {r: 1, g: 0.95, b: 0.8, a: 0.8}
+  flashlightKey: 102
+  introDuration: 3
+  introFadeTime: 1
+  followDistance: 1.5
+  followSpeed: 4.5
+  filterPreviewImage: {fileID: 21300000, guid: c8d6da129016e4c4d8d6a3f878e2c6e9, type: 3}
+  galleryTestImage: {fileID: 0}
+  npcSprite: {fileID: 0}
