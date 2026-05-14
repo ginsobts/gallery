@@ -114,7 +114,12 @@ public class RuntimeSettingsPanel : MonoBehaviour
             default: typeLabel = currentData.type; break;
         }
         RuntimeUIHelper.Section(content, typeLabel + " 设置");
-        RuntimeUIHelper.Label(content, "ID: " + currentData.id, 11);
+        RuntimeUIHelper.TextField(content, "ID", currentData.id, newId =>
+        {
+            if (string.IsNullOrEmpty(newId) || newId == currentData.id) return;
+            var editor = RuntimeEditor.Instance;
+            if (editor != null) editor.RenameElementId(currentData, newId);
+        });
 
         RuntimeUIHelper.Btn(content, "更换文件", () =>
         {

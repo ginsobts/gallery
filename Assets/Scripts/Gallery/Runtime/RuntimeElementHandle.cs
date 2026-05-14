@@ -202,6 +202,8 @@ public class RuntimeElementHandle : MonoBehaviour
 
         ActionBtn("选择文件", RuntimeUIHelper.AccentBlue, OnPickFile);
         ActionBtn("设置交互", new Color(0.55f, 0.4f, 0.7f), OnOpenSettings);
+        ActionBtn("▲ 顶层", new Color(0.3f, 0.5f, 0.3f), OnMoveToTop);
+        ActionBtn("▼ 底层", new Color(0.4f, 0.35f, 0.2f), OnMoveToBottom);
         ActionBtn("删除", RuntimeUIHelper.AccentRed, OnDelete);
     }
 
@@ -339,6 +341,37 @@ public class RuntimeElementHandle : MonoBehaviour
         var panel = editor.GetComponent<RuntimeSettingsPanel>();
         if (panel != null && data != null)
             panel.Open(data, target);
+    }
+
+    private void OnMoveToTop()
+    {
+        var editor = RuntimeEditor.Instance;
+        if (editor != null && data != null)
+        {
+            SyncTransformToData();
+            editor.MoveElementToTop(data);
+        }
+    }
+
+    private void OnMoveToBottom()
+    {
+        var editor = RuntimeEditor.Instance;
+        if (editor != null && data != null)
+        {
+            SyncTransformToData();
+            editor.MoveElementToBottom(data);
+        }
+    }
+
+    private void SyncTransformToData()
+    {
+        if (data != null && target != null)
+        {
+            data.x = target.transform.position.x;
+            data.y = target.transform.position.y;
+            data.scaleX = target.transform.localScale.x;
+            data.scaleY = target.transform.localScale.y;
+        }
     }
 
     private void OnDelete()

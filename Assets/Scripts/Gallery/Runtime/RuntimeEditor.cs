@@ -147,6 +147,26 @@ public class RuntimeEditor : MonoBehaviour
 
     // ── Element Operations ──
 
+    public void RenameElementId(ElementData elem, string newId)
+    {
+        if (elem == null || string.IsNullOrEmpty(newId)) return;
+        string oldId = elem.id;
+
+        var builder = RuntimeSceneBuilder.Instance;
+        if (builder != null && builder.ElementMap.ContainsKey(oldId))
+        {
+            var go = builder.ElementMap[oldId];
+            builder.ElementMap.Remove(oldId);
+            builder.ElementMap[newId] = go;
+        }
+
+        elem.id = newId;
+        SaveScene();
+        DestroyIdLabels();
+        CreateIdLabels();
+        SetStatus($"ID 已修改: {oldId} -> {newId}");
+    }
+
     public void AddElement(string type)
     {
         if (currentScene == null) { SetStatus("请先创建场景"); return; }
@@ -375,6 +395,8 @@ public class RuntimeEditor : MonoBehaviour
         RuntimeUIHelper.Btn(toolbarPanel.transform, "+ NPC跟随", () => AddElement("npc_follower"));
         RuntimeUIHelper.Btn(toolbarPanel.transform, "+ 天气", () => AddElement("weather"));
         RuntimeUIHelper.Spacer(toolbarPanel.transform, 4);
+        RuntimeUIHelper.Btn(toolbarPanel.transform, "设置背景图片", () => PickBackgroundImage());
+        RuntimeUIHelper.Spacer(toolbarPanel.transform, 4);
         RuntimeUIHelper.Btn(toolbarPanel.transform, "保存", () => { SaveScene(); SetStatus("已保存"); }, RuntimeUIHelper.AccentGreen);
         RuntimeUIHelper.Btn(toolbarPanel.transform, "场景列表", () =>
         {
@@ -469,6 +491,47 @@ public class RuntimeEditor : MonoBehaviour
         mouseBtnImage.color = IsMouseMode
             ? new Color(0.3f, 0.75f, 0.4f)
             : RuntimeUIHelper.BtnNormal;
+    }
+
+    private void PickBackgroundImage()
+    {
+        if (currentScene == null) { SetStatus("请先创建场景"); return; }
+        string path = NativeFilePicker.PickImageFile("选择背景图片");
+        if (string.IsNullOrEmpty(path)) return;
+
+        string rel = RuntimeAssetLoader.Instance.CopyMediaToScene(path, currentSceneName);
+        if (string.IsNullOrEmpty(rel)) { SetStatus("文件复制失败"); return; }
+
+        string fullPath = System.IO.Path.Combine(SceneDataHelper.GetScenePath(currentSceneName), rel);
+        RuntimeAssetLoader.Instance.InvalidateCache(fullPath);
+
+        currentScene.settings.backgroundMediaFile = rel;
+        var builder = RuntimeSceneBuilder.Instance;
+        if (builder != null) builder.ApplyBackgroundImage(currentScene.settings);
+        SaveScene();
+        SetStatus("背景已设置: " + rel);
+    }
+
+    public void MoveElementToTop(ElementData elem)
+    {
+        if (currentScene == null || elem == null) return;
+        int maxOrder = 0;
+        foreach (var e in currentScene.elements)
+            if (e.sortingOrder > maxOrder) maxOrder = e.sortingOrder;
+        elem.sortingOrder = maxOrder + 1;
+        RebuildElement(elem);
+        SetStatus("已移到最上层 (层级 " + elem.sortingOrder + ")");
+    }
+
+    public void MoveElementToBottom(ElementData elem)
+    {
+        if (currentScene == null || elem == null) return;
+        int minOrder = 0;
+        foreach (var e in currentScene.elements)
+            if (e.sortingOrder < minOrder) minOrder = e.sortingOrder;
+        elem.sortingOrder = minOrder - 1;
+        RebuildElement(elem);
+        SetStatus("已移到最下层 (层级 " + elem.sortingOrder + ")");
     }
 
     private bool IsPointerOverUI()

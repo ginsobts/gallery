@@ -40,6 +40,9 @@ public class SceneSettingsData
     public float groundWidth = 40f;
     public float groundHeight = 12f;
     public string groundMediaFile = "";
+    public string backgroundMediaFile = "";
+    public float backgroundScaleX = 20f;
+    public float backgroundScaleY = 12f;
 }
 
 [Serializable]

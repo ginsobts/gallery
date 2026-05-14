@@ -102,6 +102,8 @@ public class RuntimeSceneBuilder : MonoBehaviour
         SpawnAndRegister(elem);
     }
 
+    private GameObject backgroundGO;
+
     private void ApplySettings(SceneSettingsData s)
     {
         RenderSettings.ambientLight = SceneDataHelper.ToColor(s.ambientColor) * s.ambientBrightness;
@@ -111,6 +113,25 @@ public class RuntimeSceneBuilder : MonoBehaviour
 
         var player = GalleryPlayer.Instance;
         if (player != null) player.transform.position = new Vector3(s.playerStartX, s.playerStartY, 0);
+
+        ApplyBackgroundImage(s);
+    }
+
+    public void ApplyBackgroundImage(SceneSettingsData s)
+    {
+        if (backgroundGO != null) Destroy(backgroundGO);
+        if (string.IsNullOrEmpty(s.backgroundMediaFile)) return;
+
+        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, s.backgroundMediaFile);
+        if (sprite == null) return;
+
+        backgroundGO = new GameObject("SceneBackground");
+        var sr = backgroundGO.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingOrder = -1000;
+        sr.color = Color.white;
+        backgroundGO.transform.position = new Vector3(0, 0, 10f);
+        backgroundGO.transform.localScale = new Vector3(s.backgroundScaleX, s.backgroundScaleY, 1f);
     }
 
     private GameObject SpawnElement(ElementData elem)
