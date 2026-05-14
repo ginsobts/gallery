@@ -48,11 +48,17 @@ public class GalleryWeather : MonoBehaviour
     private Vector3 areaHalf;
 
     private bool isVisible;
-    private const float CULL_DISTANCE = 25f;
+    private const float CULL_DISTANCE_SQR = 25f * 25f;
     private Camera mainCam;
 
     private SpriteRenderer[] particleSRs;
     private GameObject[] particleGOs;
+    private Transform[] particleTransforms;
+
+    private float audioUpdateTimer;
+    private const float AUDIO_UPDATE_INTERVAL = 0.1f;
+
+    private float cullMaxExtentSqr;
 
     private void Awake()
     {
@@ -67,6 +73,10 @@ public class GalleryWeather : MonoBehaviour
 
         areaCenter = transform.position + (Vector3)areaCol.offset;
         areaHalf = Vector3.Scale(areaCol.size, transform.localScale) * 0.5f;
+
+        float maxExtent = Mathf.Max(areaHalf.x, areaHalf.y);
+        float cullDist = 25f + maxExtent;
+        cullMaxExtentSqr = cullDist * cullDist;
 
         CreateParticles();
 
@@ -84,14 +94,20 @@ public class GalleryWeather : MonoBehaviour
 
     private void Update()
     {
-        if (mainCam == null) mainCam = Camera.main;
+        if (mainCam == null) { mainCam = Camera.main; if (mainCam == null) return; }
 
-        float camDist = mainCam != null
-            ? Vector2.Distance(mainCam.transform.position, areaCenter)
-            : 0f;
-        isVisible = camDist < CULL_DISTANCE + Mathf.Max(areaHalf.x, areaHalf.y);
+        float dx = mainCam.transform.position.x - areaCenter.x;
+        float dy = mainCam.transform.position.y - areaCenter.y;
+        float distSqr = dx * dx + dy * dy;
+        isVisible = distSqr < cullMaxExtentSqr;
 
-        UpdateAudio();
+        audioUpdateTimer -= Time.deltaTime;
+        if (audioUpdateTimer <= 0f)
+        {
+            audioUpdateTimer = AUDIO_UPDATE_INTERVAL;
+            UpdateAudio();
+        }
+
         if (isVisible) UpdateParticles();
     }
 
@@ -99,16 +115,17 @@ public class GalleryWeather : MonoBehaviour
     {
         if (audioSource == null || playerTransform == null) return;
 
-        float dist = DistToArea(playerTransform.position);
-        float targetVol = dist <= 0 ? ambientVolume : Mathf.Lerp(ambientVolume, 0f, dist / audioFadeRange);
-        audioSource.volume = Mathf.MoveTowards(audioSource.volume, targetVol, Time.deltaTime * 2f);
+        float dist = DistToAreaSqr(playerTransform.position);
+        float fadeRangeSqr = audioFadeRange * audioFadeRange;
+        float targetVol = dist <= 0f ? ambientVolume : Mathf.Lerp(ambientVolume, 0f, dist / fadeRangeSqr);
+        audioSource.volume = Mathf.MoveTowards(audioSource.volume, targetVol, AUDIO_UPDATE_INTERVAL * 2f);
     }
 
-    private float DistToArea(Vector3 pos)
+    private float DistToAreaSqr(Vector3 pos)
     {
         float dx = Mathf.Max(0, Mathf.Abs(pos.x - areaCenter.x) - areaHalf.x);
         float dy = Mathf.Max(0, Mathf.Abs(pos.y - areaCenter.y) - areaHalf.y);
-        return Mathf.Sqrt(dx * dx + dy * dy);
+        return dx * dx + dy * dy;
     }
 
     private void CreateParticles()
@@ -121,6 +138,7 @@ public class GalleryWeather : MonoBehaviour
 
         particleGOs = new GameObject[particleCount];
         particleSRs = new SpriteRenderer[particleCount];
+        particleTransforms = new Transform[particleCount];
 
         var containerGO = new GameObject("Particles");
         containerGO.transform.SetParent(transform, false);
@@ -136,6 +154,7 @@ public class GalleryWeather : MonoBehaviour
 
             particleGOs[i] = go;
             particleSRs[i] = sr;
+            particleTransforms[i] = go.transform;
 
             particles[i] = new Particle
             {
@@ -145,45 +164,51 @@ public class GalleryWeather : MonoBehaviour
             };
 
             ResetParticle(ref particles[i], true);
-            go.transform.position = particles[i].position;
-            go.transform.localScale = particles[i].scale;
+            particleTransforms[i].position = particles[i].position;
+            particleTransforms[i].localScale = particles[i].scale;
             if (particles[i].rotation != 0)
-                go.transform.rotation = Quaternion.Euler(0, 0, particles[i].rotation);
+                particleTransforms[i].rotation = Quaternion.Euler(0, 0, particles[i].rotation);
         }
     }
 
     private void UpdateParticles()
     {
         float dt = Time.deltaTime * intensity;
+        int count = particles.Length;
+        int halfCount = count / 2;
+        bool evenFrame = (Time.frameCount & 1) == 0;
 
-        for (int i = 0; i < particles.Length; i++)
+        int start = evenFrame ? 0 : halfCount;
+        int end = evenFrame ? halfCount : count;
+
+        for (int i = start; i < end; i++)
         {
             var p = particles[i];
 
-            p.life += dt;
+            p.life += dt * 2f;
             float t = p.life / p.maxLife;
 
             if (t >= 1f)
             {
                 ResetParticle(ref p, false);
                 particles[i] = p;
-                if (particleGOs[i] != null)
+                if (particleTransforms[i] != null)
                 {
-                    particleGOs[i].transform.position = p.position;
-                    particleGOs[i].transform.localScale = p.scale;
+                    particleTransforms[i].position = p.position;
+                    particleTransforms[i].localScale = p.scale;
                     if (p.rotation != 0)
-                        particleGOs[i].transform.rotation = Quaternion.Euler(0, 0, p.rotation);
+                        particleTransforms[i].rotation = Quaternion.Euler(0, 0, p.rotation);
                 }
                 continue;
             }
 
-            p.position += p.velocity * dt;
+            p.position += p.velocity * dt * 2f;
             ApplyParticleColor(ref p, t);
             particles[i] = p;
 
-            if (particleGOs[i] != null)
+            if (particleTransforms[i] != null)
             {
-                particleGOs[i].transform.position = p.position;
+                particleTransforms[i].position = p.position;
                 particleSRs[i].color = p.color;
             }
         }

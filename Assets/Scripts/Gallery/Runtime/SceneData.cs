@@ -43,6 +43,94 @@ public class SceneSettingsData
     public string backgroundMediaFile = "";
     public float backgroundScaleX = 20f;
     public float backgroundScaleY = 12f;
+
+    // Camera block settings
+    public int cameraBlockCount = 1;
+    public float cameraFirstBlockX = 0f;
+    public float cameraBlockWidth = 0f;
+    public float cameraTransitionSpeed = 4f;
+    public float cameraY = 0f;
+    public float[] cameraBoundaries;
+
+    // Per-block settings
+    public BlockSettingsData[] blockSettings;
+
+    // Transition types (0=Cut, 1=Fade, 2=Lerp)
+    public int backgroundTransition = 1;
+    public int lightingTransition = 2;
+    public int weatherTransition = 1;
+    public int filterTransition = 0;
+    public int bgmTransition = 1;
+    public float transitionDuration = 1.5f;
+
+    // Timeline
+    public TimelinePointData[] timelinePoints;
+    public float[] timelineLineColor = { 0.6f, 0.6f, 0.7f, 0.4f };
+    public float timelineLineWidth = 0.05f;
+    public float timelineDotSize = 0.2f;
+    public float timelineTextSize = 0.08f;
+
+    public BlockSettingsData GetBlockSettings(int blockIndex)
+    {
+        if (blockSettings != null)
+        {
+            for (int i = 0; i < blockSettings.Length; i++)
+                if (blockSettings[i].blockIndex == blockIndex) return blockSettings[i];
+        }
+        return new BlockSettingsData
+        {
+            blockIndex = blockIndex,
+            backgroundMediaFile = backgroundMediaFile,
+            backgroundScaleX = backgroundScaleX,
+            backgroundScaleY = backgroundScaleY,
+            ambientBrightness = ambientBrightness,
+            ambientColor = ambientColor != null ? (float[])ambientColor.Clone() : new float[] { 0.5f, 0.5f, 0.6f, 1f },
+            bgColor = backgroundColor != null ? (float[])backgroundColor.Clone() : new float[] { 0.05f, 0.05f, 0.1f, 1f }
+        };
+    }
+}
+
+public enum BlockTransitionType { Cut, Fade, Lerp }
+
+[Serializable]
+public class BlockSettingsData
+{
+    public int blockIndex;
+
+    // Background
+    public string backgroundMediaFile = "";
+    public float backgroundScaleX = 20f;
+    public float backgroundScaleY = 12f;
+
+    // Lighting
+    public float ambientBrightness = 0.3f;
+    public float[] ambientColor = { 0.5f, 0.5f, 0.6f, 1f };
+    public float[] bgColor = { 0.05f, 0.05f, 0.1f, 1f };
+
+    // Weather
+    public bool weatherEnabled = false;
+    public int weatherType = 1;
+    public int weatherParticles = 60;
+    public float[] weatherColor = { 1f, 1f, 1f, 1f };
+
+    // Filter
+    public int colorFilter = 0;
+    public float colorFilterIntensity = 0.7f;
+    public int artisticStyle = 0;
+    public float artisticIntensity = 0.85f;
+
+    // BGM
+    public string bgmFile = "";
+    public float bgmVolume = 0.4f;
+    public float bgmFadeTime = 1.5f;
+}
+
+[Serializable]
+public class TimelinePointData
+{
+    public float x, y;
+    public string dateText = "";
+    public float[] color = { 0.9f, 0.7f, 0.2f, 1f };
 }
 
 [Serializable]

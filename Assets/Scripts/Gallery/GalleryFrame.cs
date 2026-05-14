@@ -117,27 +117,35 @@ public class GalleryFrame : MonoBehaviour
 
     private bool needsUpdate;
     private int staggerFrame;
+    private float fadeDistSqr;
+    private float approachDistSqr;
+    private float interactDistSqr;
 
     private void Start()
     {
         playerTransform = GalleryPlayer.Instance != null ? GalleryPlayer.Instance.transform : null;
         if (!string.IsNullOrEmpty(caption)) CreateCaption();
         needsUpdate = fadeInOnApproach || enableKeyInteract || enableApproachTrigger;
-        staggerFrame = Random.Range(0, 3);
+        staggerFrame = Random.Range(0, 4);
+        fadeDistSqr = fadeDistance * fadeDistance;
+        approachDistSqr = approachDistance * approachDistance;
+        interactDistSqr = interactDistance * interactDistance;
     }
 
     private void Update()
     {
         if (!needsUpdate || playerTransform == null) return;
 
-        if ((Time.frameCount + staggerFrame) % 2 != 0 && !keyInteractReady)
+        if ((Time.frameCount + staggerFrame) % 3 != 0 && !keyInteractReady)
             return;
 
-        float playerDist = Vector2.Distance(transform.position, playerTransform.position);
+        float dx = transform.position.x - playerTransform.position.x;
+        float dy = transform.position.y - playerTransform.position.y;
+        float playerDistSqr = dx * dx + dy * dy;
 
         if (fadeInOnApproach && !revealed)
         {
-            if (playerDist <= fadeDistance)
+            if (playerDistSqr <= fadeDistSqr)
             {
                 currentAlpha = Mathf.MoveTowards(currentAlpha, 1f, fadeSpeed * Time.deltaTime);
                 sr.color = new Color(sr.color.r, sr.color.g, sr.color.b, currentAlpha);
@@ -154,7 +162,7 @@ public class GalleryFrame : MonoBehaviour
 
         if (enableApproachTrigger && !approachTriggered)
         {
-            if (playerDist <= approachDistance)
+            if (playerDistSqr <= approachDistSqr)
             {
                 ExecuteEffects(approachEffects);
                 if (approachOnlyOnce) approachTriggered = true;
@@ -162,12 +170,12 @@ public class GalleryFrame : MonoBehaviour
         }
         if (enableApproachTrigger && !approachOnlyOnce && approachTriggered)
         {
-            if (playerDist > approachDistance) approachTriggered = false;
+            if (playerDistSqr > approachDistSqr) approachTriggered = false;
         }
 
         if (!enableKeyInteract) return;
 
-        bool inRange = playerDist <= interactDistance;
+        bool inRange = playerDistSqr <= interactDistSqr;
         if (inRange && !keyInteractReady)
         {
             keyInteractReady = true;

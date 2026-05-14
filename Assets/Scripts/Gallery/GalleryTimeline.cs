@@ -35,11 +35,19 @@ public class GalleryTimeline : MonoBehaviour
         CreateMarkers();
     }
 
+    private static Material sharedLineMaterial;
+
     private void CreateLines()
     {
+        if (sharedLineMaterial == null)
+        {
+            var shader = Shader.Find("Sprites/Default");
+            if (shader != null) sharedLineMaterial = new Material(shader);
+        }
+
         for (int i = 0; i < points.Length - 1; i++)
         {
-            var lineGO = new GameObject($"Timeline_Line_{i}");
+            var lineGO = new GameObject("Timeline_Line_" + i);
             lineGO.transform.SetParent(transform);
 
             var lr = lineGO.AddComponent<LineRenderer>();
@@ -51,7 +59,7 @@ public class GalleryTimeline : MonoBehaviour
             lr.startColor = lineColor;
             lr.endColor = lineColor;
             lr.sortingOrder = sortingOrder;
-            lr.material = new Material(Shader.Find("Sprites/Default"));
+            if (sharedLineMaterial != null) lr.sharedMaterial = sharedLineMaterial;
             lr.useWorldSpace = true;
         }
     }

@@ -228,6 +228,55 @@ public static class RuntimeUIHelper
         go.AddComponent<LayoutElement>().minHeight = height;
     }
 
+    public static void ButtonGroup(Transform parent, string label, string[] options, int current, System.Action<int> onChange)
+    {
+        if (!string.IsNullOrEmpty(label))
+            Label(parent, label, 12);
+
+        int perRow = 4;
+        for (int row = 0; row * perRow < options.Length; row++)
+        {
+            var rowGO = new GameObject("BtnRow_" + row);
+            rowGO.transform.SetParent(parent, false);
+            rowGO.AddComponent<RectTransform>().sizeDelta = new Vector2(0, 24);
+            var hlg = rowGO.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 2;
+            hlg.padding = new RectOffset(2, 2, 0, 0);
+            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandHeight = true;
+            rowGO.AddComponent<LayoutElement>().minHeight = 24;
+
+            int start = row * perRow;
+            int end = Mathf.Min(start + perRow, options.Length);
+            for (int i = start; i < end; i++)
+            {
+                int idx = i;
+                Color c = (idx == current) ? AccentBlue : BtnNormal;
+                var btn = Btn(rowGO.transform, options[idx], () => onChange(idx), c);
+                var le = btn.GetComponent<LayoutElement>();
+                if (le != null) { le.minHeight = 22; le.flexibleWidth = 1; }
+                var txt = btn.GetComponentInChildren<Text>();
+                if (txt != null) txt.fontSize = 11;
+            }
+        }
+    }
+
+    public static void ReadOnlyField(Transform parent, string label, string value)
+    {
+        var go = new GameObject("RO_" + label);
+        go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>().sizeDelta = new Vector2(0, 22);
+        var hlg = go.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 4; hlg.padding = new RectOffset(4, 4, 2, 2);
+        hlg.childForceExpandHeight = true;
+        go.AddComponent<LayoutElement>().minHeight = 22;
+
+        var lbl = Label(go.transform, label, 11);
+        lbl.GetComponent<LayoutElement>().preferredWidth = 80;
+        var val = Label(go.transform, value, 11);
+        val.color = new Color(0.7f, 0.8f, 0.9f);
+    }
+
     public static GameObject ScrollPanel(Transform parent, out Transform content)
     {
         var scrollGO = new GameObject("Scroll");

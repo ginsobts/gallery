@@ -11,8 +11,21 @@ public class RuntimeSettingsPanel : MonoBehaviour
     private ElementData currentData;
     private GameObject currentTarget;
     private bool needsRebuild;
+    private bool pendingUIRebuild;
 
     public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
+
+    private void Update()
+    {
+        if (!pendingUIRebuild) return;
+        pendingUIRebuild = false;
+        if (IsOpen) BuildContent();
+    }
+
+    private void ScheduleRebuild()
+    {
+        pendingUIRebuild = true;
+    }
 
     public void Open(ElementData data, GameObject target)
     {
@@ -20,6 +33,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
         currentTarget = target;
         if (panelRoot == null) CreatePanel();
         panelRoot.SetActive(true);
+        pendingUIRebuild = false;
         BuildContent();
     }
 
@@ -182,7 +196,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
         BuildColorField("文字颜色", p.captionColor, arr => { p.captionColor = arr; needsRebuild = true; });
 
         RuntimeUIHelper.Spacer(content, 6);
-        RuntimeUIHelper.ToggleField(content, "附带天气特效", p.hasWeather, v => { p.hasWeather = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "附带天气特效", p.hasWeather, v => { p.hasWeather = v; needsRebuild = true; ScheduleRebuild(); });
         if (p.hasWeather)
         {
             RuntimeUIHelper.IntField(content, "天气类型", p.weatherType, i => { p.weatherType = i; needsRebuild = true; });
@@ -258,11 +272,11 @@ public class RuntimeSettingsPanel : MonoBehaviour
                 int idx = i;
                 RuntimeUIHelper.TextField(content, $"行{i + 1} 文字", nd.lines[i].text, s => { nd.lines[idx].text = s; needsRebuild = true; });
                 RuntimeUIHelper.FloatField(content, $"行{i + 1} 时长", nd.lines[i].duration, f => { nd.lines[idx].duration = f; needsRebuild = true; });
-                RuntimeUIHelper.Btn(content, $"删除行 {i + 1}", () => { RemoveDialogueLine(nd, idx); BuildContent(); }, RuntimeUIHelper.AccentRed);
+                RuntimeUIHelper.Btn(content, "删除行 " + (i + 1), () => { RemoveDialogueLine(nd, idx); ScheduleRebuild(); }, RuntimeUIHelper.AccentRed);
                 RuntimeUIHelper.Spacer(content, 2);
             }
         }
-        RuntimeUIHelper.Btn(content, "+ 添加对话行", () => { AddDialogueLine(nd); BuildContent(); });
+        RuntimeUIHelper.Btn(content, "+ 添加对话行", () => { AddDialogueLine(nd); ScheduleRebuild(); });
         RuntimeUIHelper.Spacer(content);
     }
 
@@ -324,7 +338,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
             currentData.enableKeyInteract = v;
             if (v && currentData.keyEffects == null) currentData.keyEffects = new EffectData();
             needsRebuild = true;
-            BuildContent();
+            ScheduleRebuild();
         });
         if (currentData.enableKeyInteract)
         {
@@ -341,7 +355,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
             currentData.enableApproachTrigger = v;
             if (v && currentData.approachEffects == null) currentData.approachEffects = new EffectData();
             needsRebuild = true;
-            BuildContent();
+            ScheduleRebuild();
         });
         if (currentData.enableApproachTrigger)
         {
@@ -359,14 +373,14 @@ public class RuntimeSettingsPanel : MonoBehaviour
 
         RuntimeUIHelper.ToggleField(content, "缩放查看", fx.zoom, v => { fx.zoom = v; needsRebuild = true; });
 
-        RuntimeUIHelper.ToggleField(content, "显示文字", fx.showText, v => { fx.showText = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "显示文字", fx.showText, v => { fx.showText = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.showText)
         {
             RuntimeUIHelper.TextField(content, "文字内容", fx.text, s => { fx.text = s; needsRebuild = true; });
             RuntimeUIHelper.FloatField(content, "显示时长", fx.textDuration, f => { fx.textDuration = f; needsRebuild = true; });
         }
 
-        RuntimeUIHelper.ToggleField(content, "播放音效", fx.playSound, v => { fx.playSound = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "播放音效", fx.playSound, v => { fx.playSound = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.playSound)
         {
             RuntimeUIHelper.FloatField(content, "音效音量", fx.soundVolume, f => { fx.soundVolume = f; needsRebuild = true; });
@@ -385,7 +399,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
                 RuntimeUIHelper.Label(content, "  " + fx.soundFile, 10);
         }
 
-        RuntimeUIHelper.ToggleField(content, "切换BGM", fx.changeBGM, v => { fx.changeBGM = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "切换BGM", fx.changeBGM, v => { fx.changeBGM = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.changeBGM)
         {
             RuntimeUIHelper.FloatField(content, "BGM音量", fx.bgmVolume, f => { fx.bgmVolume = f; needsRebuild = true; });
@@ -404,7 +418,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
                 RuntimeUIHelper.Label(content, "  " + fx.bgmFile, 10);
         }
 
-        RuntimeUIHelper.ToggleField(content, "改变天气", fx.changeWeather, v => { fx.changeWeather = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "改变天气", fx.changeWeather, v => { fx.changeWeather = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.changeWeather)
         {
             RuntimeUIHelper.IntField(content, "天气类型", fx.weatherType, i => { fx.weatherType = i; needsRebuild = true; });
@@ -412,22 +426,22 @@ public class RuntimeSettingsPanel : MonoBehaviour
             BuildColorField("天气颜色", fx.weatherColor, arr => { fx.weatherColor = arr; needsRebuild = true; });
         }
 
-        RuntimeUIHelper.ToggleField(content, "改变背景", fx.changeBackground, v => { fx.changeBackground = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "改变背景", fx.changeBackground, v => { fx.changeBackground = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.changeBackground)
         {
             BuildColorField("背景颜色", fx.backgroundColor, arr => { fx.backgroundColor = arr; needsRebuild = true; });
             RuntimeUIHelper.FloatField(content, "淡入时间", fx.backgroundFade, f => { fx.backgroundFade = f; needsRebuild = true; });
         }
 
-        RuntimeUIHelper.ToggleField(content, "改变亮度", fx.changeBrightness, v => { fx.changeBrightness = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "改变亮度", fx.changeBrightness, v => { fx.changeBrightness = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.changeBrightness)
             RuntimeUIHelper.FloatField(content, "亮度值", fx.brightness, f => { fx.brightness = f; needsRebuild = true; });
 
-        RuntimeUIHelper.ToggleField(content, "加载场景", fx.loadScene, v => { fx.loadScene = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "加载场景", fx.loadScene, v => { fx.loadScene = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.loadScene)
             RuntimeUIHelper.TextField(content, "场景名", fx.sceneName, s => { fx.sceneName = s; needsRebuild = true; });
 
-        RuntimeUIHelper.ToggleField(content, "开关物体", fx.toggleObject, v => { fx.toggleObject = v; needsRebuild = true; BuildContent(); });
+        RuntimeUIHelper.ToggleField(content, "开关物体", fx.toggleObject, v => { fx.toggleObject = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.toggleObject)
         {
             RuntimeUIHelper.TextField(content, "目标ID", fx.targetElementId, s => { fx.targetElementId = s; needsRebuild = true; });
@@ -436,6 +450,13 @@ public class RuntimeSettingsPanel : MonoBehaviour
     }
 
     // ── Color Picker (simple RGB) ──
+    private static readonly Color[] PresetColors = {
+        Color.white, Color.black, Color.red, Color.green, Color.blue,
+        new Color(1f, 0.5f, 0f), Color.yellow, Color.cyan, Color.magenta,
+        new Color(0.3f, 0.3f, 0.5f), new Color(0.05f, 0.05f, 0.1f),
+        new Color(0.5f, 0.8f, 0.3f)
+    };
+
     private void BuildColorField(string label, float[] color, System.Action<float[]> onChange)
     {
         if (color == null || color.Length < 3) color = new[] { 1f, 1f, 1f, 1f };
@@ -461,17 +482,9 @@ public class RuntimeSettingsPanel : MonoBehaviour
         pimg.raycastTarget = false;
         preview.AddComponent<LayoutElement>().preferredWidth = 26;
 
-        var presetColors = new Color[]
+        for (int pi = 0; pi < PresetColors.Length; pi++)
         {
-            Color.white, Color.black, Color.red, Color.green, Color.blue,
-            new Color(1f, 0.5f, 0f), Color.yellow, Color.cyan, Color.magenta,
-            new Color(0.3f, 0.3f, 0.5f), new Color(0.05f, 0.05f, 0.1f),
-            new Color(0.5f, 0.8f, 0.3f)
-        };
-
-        foreach (var pc in presetColors)
-        {
-            Color preset = pc;
+            Color preset = PresetColors[pi];
             var cBtn = new GameObject("C");
             cBtn.transform.SetParent(go.transform, false);
             cBtn.AddComponent<RectTransform>();

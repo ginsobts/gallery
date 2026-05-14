@@ -55,6 +55,10 @@ public class GalleryBackground : MonoBehaviour
         bgSR_B.color = SetAlpha(bgSR_B.color, 0f);
     }
 
+    private Vector3 lastCamPos;
+    private float lastOrthoSize;
+    private float lastAspect;
+
     private void LateUpdate()
     {
         if (playerTransform == null || mainCam == null) return;
@@ -75,14 +79,30 @@ public class GalleryBackground : MonoBehaviour
     private void FollowCamera()
     {
         Vector3 camPos = mainCam.transform.position;
-        bgSR_A.transform.position = new Vector3(camPos.x, camPos.y, 10f);
-        bgSR_B.transform.position = new Vector3(camPos.x, camPos.y, 10f);
+        float ortho = mainCam.orthographicSize;
+        float aspect = mainCam.aspect;
 
-        float camH = mainCam.orthographicSize * 2f;
-        float camW = camH * mainCam.aspect;
-        Vector3 scale = new Vector3(camW + 1f, camH + 1f, 1f);
-        bgSR_A.transform.localScale = scale;
-        bgSR_B.transform.localScale = scale;
+        bool posChanged = camPos.x != lastCamPos.x || camPos.y != lastCamPos.y;
+        bool sizeChanged = ortho != lastOrthoSize || aspect != lastAspect;
+
+        if (!posChanged && !sizeChanged) return;
+
+        Vector3 bgPos = new Vector3(camPos.x, camPos.y, 10f);
+        bgSR_A.transform.position = bgPos;
+        bgSR_B.transform.position = bgPos;
+
+        if (sizeChanged)
+        {
+            float camH = ortho * 2f;
+            float camW = camH * aspect;
+            Vector3 scale = new Vector3(camW + 1f, camH + 1f, 1f);
+            bgSR_A.transform.localScale = scale;
+            bgSR_B.transform.localScale = scale;
+            lastOrthoSize = ortho;
+            lastAspect = aspect;
+        }
+
+        lastCamPos = camPos;
     }
 
     private int FindBestZone()
@@ -90,14 +110,19 @@ public class GalleryBackground : MonoBehaviour
         if (zones == null || zones.Length == 0) return -1;
 
         int best = -1;
-        float bestDist = float.MaxValue;
+        float bestDistSqr = float.MaxValue;
+        float px = playerTransform.position.x;
+        float py = playerTransform.position.y;
 
         for (int i = 0; i < zones.Length; i++)
         {
-            float dist = Vector2.Distance(playerTransform.position, zones[i].center);
-            if (dist <= zones[i].radius && dist < bestDist)
+            float dx = px - zones[i].center.x;
+            float dy = py - zones[i].center.y;
+            float distSqr = dx * dx + dy * dy;
+            float rSqr = zones[i].radius * zones[i].radius;
+            if (distSqr <= rSqr && distSqr < bestDistSqr)
             {
-                bestDist = dist;
+                bestDistSqr = distSqr;
                 best = i;
             }
         }

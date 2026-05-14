@@ -15,6 +15,11 @@ public class RuntimeElementHandle : MonoBehaviour
     private ElementData data;
     private Camera cam;
 
+    private CanvasScaler cachedScaler;
+    private RectTransform cachedActionBarRT;
+    private RectTransform cachedHandleBarRT;
+    private SpriteRenderer cachedTargetSR;
+
     private enum DragMode { None, Move, ScaleH, ScaleV, ScaleUniform }
     private DragMode dragMode;
     private Vector3 dragStartMouse;
@@ -26,6 +31,7 @@ public class RuntimeElementHandle : MonoBehaviour
         target = go;
         data = elemData;
         cam = Camera.main;
+        cachedTargetSR = go != null ? go.GetComponent<SpriteRenderer>() : null;
         if (root == null) CreateUI();
         root.SetActive(true);
         UpdatePosition();
@@ -107,14 +113,22 @@ public class RuntimeElementHandle : MonoBehaviour
     {
         if (target == null || cam == null || rootRT == null) return;
 
-        Bounds bounds = GetWorldBounds(target);
+        Bounds bounds;
+        if (cachedTargetSR != null && cachedTargetSR.sprite != null)
+            bounds = cachedTargetSR.bounds;
+        else
+        {
+            Vector3 pos = target.transform.position;
+            Vector3 s = target.transform.localScale;
+            bounds = new Bounds(pos, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), 0));
+        }
+
         Vector2 min = cam.WorldToScreenPoint(bounds.min);
         Vector2 max = cam.WorldToScreenPoint(bounds.max);
 
-        var canvasScaler = handleCanvas.GetComponent<CanvasScaler>();
-        float scaleX = canvasScaler.referenceResolution.x / Screen.width;
-        float scaleY = canvasScaler.referenceResolution.y / Screen.height;
-        float scale = Mathf.Lerp(scaleX, scaleY, canvasScaler.matchWidthOrHeight);
+        float scaleX = cachedScaler.referenceResolution.x / Screen.width;
+        float scaleY = cachedScaler.referenceResolution.y / Screen.height;
+        float scale = Mathf.Lerp(scaleX, scaleY, cachedScaler.matchWidthOrHeight);
 
         float pad = 8f;
         float x0 = min.x * scale - pad;
@@ -127,27 +141,22 @@ public class RuntimeElementHandle : MonoBehaviour
         rootRT.anchoredPosition = new Vector2(x0, y0);
         rootRT.sizeDelta = new Vector2(w, h);
 
-        var abRT = actionBar.GetComponent<RectTransform>();
-        abRT.anchoredPosition = new Vector2(w * 0.5f, h + 4);
-
-        var hbRT = handleBar.GetComponent<RectTransform>();
-        hbRT.anchoredPosition = new Vector2(w * 0.5f, -4);
+        cachedActionBarRT.anchoredPosition = new Vector2(w * 0.5f, h + 4);
+        cachedHandleBarRT.anchoredPosition = new Vector2(w * 0.5f, -4);
     }
+
+    private string lastSizeText;
 
     private void UpdateSizeLabel()
     {
         if (sizeLabel == null || target == null) return;
         Vector3 s = target.transform.localScale;
-        sizeLabel.text = $"{s.x:F1} x {s.y:F1}";
-    }
-
-    private Bounds GetWorldBounds(GameObject go)
-    {
-        var sr = go.GetComponent<SpriteRenderer>();
-        if (sr != null && sr.sprite != null) return sr.bounds;
-        Vector3 pos = go.transform.position;
-        Vector3 s = go.transform.localScale;
-        return new Bounds(pos, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), 0));
+        string newText = s.x.ToString("F1") + " x " + s.y.ToString("F1");
+        if (newText != lastSizeText)
+        {
+            lastSizeText = newText;
+            sizeLabel.text = newText;
+        }
     }
 
     // ── UI Creation ──
@@ -157,6 +166,7 @@ public class RuntimeElementHandle : MonoBehaviour
         var editor = RuntimeEditor.Instance;
         if (editor == null || editor.EditorCanvas == null) return;
         handleCanvas = editor.EditorCanvas;
+        cachedScaler = handleCanvas.GetComponent<CanvasScaler>();
 
         root = new GameObject("ElementHandle");
         root.transform.SetParent(handleCanvas.transform, false);
@@ -168,6 +178,9 @@ public class RuntimeElementHandle : MonoBehaviour
         CreateBorder();
         CreateActionBar();
         CreateHandleBar();
+
+        cachedActionBarRT = actionBar.GetComponent<RectTransform>();
+        cachedHandleBarRT = handleBar.GetComponent<RectTransform>();
     }
 
     private void CreateBorder()
@@ -202,6 +215,7 @@ public class RuntimeElementHandle : MonoBehaviour
 
         ActionBtn("选择文件", RuntimeUIHelper.AccentBlue, OnPickFile);
         ActionBtn("设置交互", new Color(0.55f, 0.4f, 0.7f), OnOpenSettings);
+        ActionBtn("复制", new Color(0.4f, 0.5f, 0.6f), OnDuplicate);
         ActionBtn("▲ 顶层", new Color(0.3f, 0.5f, 0.3f), OnMoveToTop);
         ActionBtn("▼ 底层", new Color(0.4f, 0.35f, 0.2f), OnMoveToBottom);
         ActionBtn("删除", RuntimeUIHelper.AccentRed, OnDelete);
@@ -372,6 +386,12 @@ public class RuntimeElementHandle : MonoBehaviour
             data.scaleX = target.transform.localScale.x;
             data.scaleY = target.transform.localScale.y;
         }
+    }
+
+    private void OnDuplicate()
+    {
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.DuplicateSelected();
     }
 
     private void OnDelete()

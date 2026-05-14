@@ -7,6 +7,17 @@ public class RuntimeSceneBuilder : MonoBehaviour
     private List<GameObject> spawnedElements = new List<GameObject>();
     private Dictionary<string, GameObject> elementMap = new Dictionary<string, GameObject>();
 
+    private static Material _sharedLineMat;
+    private static Material GetSharedLineMaterial()
+    {
+        if (_sharedLineMat == null)
+        {
+            var shader = Shader.Find("Sprites/Default");
+            if (shader != null) _sharedLineMat = new Material(shader);
+        }
+        return _sharedLineMat;
+    }
+
     public static RuntimeSceneBuilder Instance { get; private set; }
 
     private void Awake()
@@ -115,6 +126,25 @@ public class RuntimeSceneBuilder : MonoBehaviour
         if (player != null) player.transform.position = new Vector3(s.playerStartX, s.playerStartY, 0);
 
         ApplyBackgroundImage(s);
+        ApplyCameraSettings(s);
+        ApplyTimeline(s);
+        ApplyBlockSettingsManager(s);
+    }
+
+    public void ApplyBlockSettingsManager(SceneSettingsData s)
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+
+        var mgr = cam.GetComponent<BlockSettingsManager>();
+        if (s.blockSettings == null || s.blockSettings.Length == 0)
+        {
+            if (mgr != null) Destroy(mgr);
+            return;
+        }
+
+        if (mgr == null) mgr = cam.gameObject.AddComponent<BlockSettingsManager>();
+        mgr.Init(s, currentSceneName);
     }
 
     public void ApplyBackgroundImage(SceneSettingsData s)
@@ -132,6 +162,95 @@ public class RuntimeSceneBuilder : MonoBehaviour
         sr.color = Color.white;
         backgroundGO.transform.position = new Vector3(0, 0, 10f);
         backgroundGO.transform.localScale = new Vector3(s.backgroundScaleX, s.backgroundScaleY, 1f);
+    }
+
+    public void ApplyCameraSettings(SceneSettingsData s)
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+
+        bool hasBoundaries = s.cameraBoundaries != null && s.cameraBoundaries.Length > 0;
+        bool hasBlocks = s.cameraBlockCount > 1;
+
+        if (!hasBoundaries && !hasBlocks)
+        {
+            var existing = cam.GetComponent<GalleryCamera>();
+            if (existing != null) Destroy(existing);
+            return;
+        }
+
+        var gc = cam.GetComponent<GalleryCamera>();
+        if (gc == null) gc = cam.gameObject.AddComponent<GalleryCamera>();
+
+        if (hasBoundaries)
+        {
+            gc.SetBoundaries(s.cameraBoundaries, s.cameraTransitionSpeed, s.cameraY);
+            s.cameraBlockCount = s.cameraBoundaries.Length + 1;
+        }
+        else
+        {
+            gc.SetParams(s.cameraBlockCount, s.cameraFirstBlockX, s.cameraBlockWidth, s.cameraTransitionSpeed, s.cameraY);
+        }
+    }
+
+    private GameObject timelineGO;
+
+    public void ApplyTimeline(SceneSettingsData s)
+    {
+        if (timelineGO != null) Destroy(timelineGO);
+        if (s.timelinePoints == null || s.timelinePoints.Length == 0) return;
+
+        timelineGO = new GameObject("RuntimeTimeline");
+        var sprite = RuntimeSprite.GetCircle(16);
+        Color lineColor = SceneDataHelper.ToColor(s.timelineLineColor);
+
+        for (int i = 0; i < s.timelinePoints.Length - 1; i++)
+        {
+            var lineGO = new GameObject("TL_Line_" + i);
+            lineGO.transform.SetParent(timelineGO.transform);
+            var lr = lineGO.AddComponent<LineRenderer>();
+            lr.positionCount = 2;
+            lr.SetPosition(0, new Vector3(s.timelinePoints[i].x, s.timelinePoints[i].y, 0));
+            lr.SetPosition(1, new Vector3(s.timelinePoints[i + 1].x, s.timelinePoints[i + 1].y, 0));
+            lr.startWidth = s.timelineLineWidth;
+            lr.endWidth = s.timelineLineWidth;
+            lr.startColor = lineColor;
+            lr.endColor = lineColor;
+            lr.sortingOrder = -2;
+            lr.sharedMaterial = GetSharedLineMaterial();
+            lr.useWorldSpace = true;
+        }
+
+        for (int i = 0; i < s.timelinePoints.Length; i++)
+        {
+            var pt = s.timelinePoints[i];
+            Color c = SceneDataHelper.ToColor(pt.color);
+
+            var markerGO = new GameObject("TL_Marker_" + i);
+            markerGO.transform.SetParent(timelineGO.transform);
+            markerGO.transform.position = new Vector3(pt.x, pt.y, 0);
+            var sr = markerGO.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = c;
+            sr.sortingOrder = -1;
+            markerGO.transform.localScale = Vector3.one * s.timelineDotSize;
+
+            if (!string.IsNullOrEmpty(pt.dateText))
+            {
+                var textGO = new GameObject("DateText");
+                textGO.transform.SetParent(markerGO.transform);
+                textGO.transform.localPosition = new Vector3(0, s.timelineDotSize * 3f, 0);
+                textGO.transform.localScale = Vector3.one * (1f / s.timelineDotSize);
+                var tm = textGO.AddComponent<TextMesh>();
+                tm.text = pt.dateText;
+                tm.characterSize = s.timelineTextSize;
+                tm.fontSize = 60;
+                tm.anchor = TextAnchor.LowerCenter;
+                tm.alignment = TextAlignment.Center;
+                tm.color = c;
+                textGO.GetComponent<MeshRenderer>().sortingOrder = 0;
+            }
+        }
     }
 
     private GameObject SpawnElement(ElementData elem)

@@ -29,6 +29,8 @@ public class RuntimeEditor : MonoBehaviour
 
     private RuntimeElementHandle elementHandle;
     private RuntimeSettingsPanel settingsPanel;
+    private RuntimeSceneSettingsPanel sceneSettingsPanel;
+    private RuntimeBlockSettingsPanel blockSettingsPanel;
     private List<GameObject> idLabels = new List<GameObject>();
 
     public SceneData CurrentScene => currentScene;
@@ -49,6 +51,8 @@ public class RuntimeEditor : MonoBehaviour
         CreateEditorUI();
         elementHandle = gameObject.AddComponent<RuntimeElementHandle>();
         settingsPanel = gameObject.AddComponent<RuntimeSettingsPanel>();
+        sceneSettingsPanel = gameObject.AddComponent<RuntimeSceneSettingsPanel>();
+        blockSettingsPanel = gameObject.AddComponent<RuntimeBlockSettingsPanel>();
         SetEditorActive(false);
     }
 
@@ -59,6 +63,8 @@ public class RuntimeEditor : MonoBehaviour
 
         if (!IsEditing) return;
         if (settingsPanel != null && settingsPanel.IsOpen) return;
+        if (sceneSettingsPanel != null && (sceneSettingsPanel.IsOpen || sceneSettingsPanel.IsInPickMode)) return;
+        if (blockSettingsPanel != null && blockSettingsPanel.IsOpen) return;
 
         if (IsMouseMode)
             HandleSelection();
@@ -67,12 +73,15 @@ public class RuntimeEditor : MonoBehaviour
             DeleteSelected();
     }
 
+    private int unfreezeFrames;
+
     public void ToggleEditor()
     {
         IsEditing = !IsEditing;
         SetEditorActive(IsEditing);
         if (IsEditing)
         {
+            unfreezeFrames = 0;
             GalleryPlayer.Freeze();
             LoadCurrentSceneData();
             CreateIdLabels();
@@ -83,7 +92,19 @@ public class RuntimeEditor : MonoBehaviour
             Deselect();
             DestroyIdLabels();
             if (settingsPanel != null) settingsPanel.Close();
+            if (sceneSettingsPanel != null) sceneSettingsPanel.Close();
+            if (blockSettingsPanel != null) blockSettingsPanel.Close();
             GalleryPlayer.ForceUnfreeze();
+            unfreezeFrames = 3;
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (unfreezeFrames > 0 && !IsEditing)
+        {
+            GalleryPlayer.ForceUnfreeze();
+            unfreezeFrames--;
         }
     }
 
@@ -189,6 +210,33 @@ public class RuntimeEditor : MonoBehaviour
         SetStatus("已添加 " + type);
 
         var newGo = builder?.ElementMap.ContainsKey(elem.id) == true ? builder.ElementMap[elem.id] : null;
+        if (newGo != null) Select(newGo);
+    }
+
+    public void DuplicateSelected()
+    {
+        if (selectedObject == null || currentScene == null) return;
+        if (!goToData.TryGetValue(selectedObject, out var srcElem)) return;
+
+        string json = JsonUtility.ToJson(srcElem);
+        ElementData clone = JsonUtility.FromJson<ElementData>(json);
+        clone.id = System.Guid.NewGuid().ToString("N").Substring(0, 8);
+        clone.x += 1.5f;
+        clone.y += -1f;
+
+        currentScene.elements.Add(clone);
+
+        var builder = RuntimeSceneBuilder.Instance;
+        if (builder != null)
+        {
+            GameObject go = builder.SpawnAndRegister(clone);
+            if (go != null) goToData[go] = clone;
+        }
+        SaveScene();
+        CreateIdLabels();
+        SetStatus("已复制: " + clone.id);
+
+        var newGo = builder?.ElementMap.ContainsKey(clone.id) == true ? builder.ElementMap[clone.id] : null;
         if (newGo != null) Select(newGo);
     }
 
@@ -396,7 +444,8 @@ public class RuntimeEditor : MonoBehaviour
         RuntimeUIHelper.Btn(toolbarPanel.transform, "+ NPC跟随", () => AddElement("npc_follower"));
         RuntimeUIHelper.Btn(toolbarPanel.transform, "+ 天气", () => AddElement("weather"));
         RuntimeUIHelper.Spacer(toolbarPanel.transform, 4);
-        RuntimeUIHelper.Btn(toolbarPanel.transform, "设置背景图片", () => PickBackgroundImage());
+        RuntimeUIHelper.Btn(toolbarPanel.transform, "场景布局", () => OpenSceneSettings());
+        RuntimeUIHelper.Btn(toolbarPanel.transform, "当前区块设置", () => OpenBlockSettings());
         RuntimeUIHelper.Spacer(toolbarPanel.transform, 4);
         RuntimeUIHelper.Btn(toolbarPanel.transform, "保存", () => { SaveScene(); SetStatus("已保存"); }, RuntimeUIHelper.AccentGreen);
         RuntimeUIHelper.Btn(toolbarPanel.transform, "场景列表", () =>
@@ -643,6 +692,28 @@ public class RuntimeEditor : MonoBehaviour
         mouseBtnImage.color = IsMouseMode
             ? new Color(0.3f, 0.75f, 0.4f)
             : RuntimeUIHelper.BtnNormal;
+    }
+
+    private void OpenSceneSettings()
+    {
+        if (currentScene == null) { SetStatus("请先创建场景"); return; }
+        if (blockSettingsPanel != null && blockSettingsPanel.IsOpen) blockSettingsPanel.Close();
+        if (sceneSettingsPanel != null)
+        {
+            if (sceneSettingsPanel.IsOpen) { sceneSettingsPanel.Close(); return; }
+            sceneSettingsPanel.Open(currentScene.settings);
+        }
+    }
+
+    private void OpenBlockSettings()
+    {
+        if (currentScene == null) { SetStatus("请先创建场景"); return; }
+        if (sceneSettingsPanel != null && sceneSettingsPanel.IsOpen) sceneSettingsPanel.Close();
+        if (blockSettingsPanel != null)
+        {
+            if (blockSettingsPanel.IsOpen) { blockSettingsPanel.Close(); return; }
+            blockSettingsPanel.Open(currentScene.settings);
+        }
     }
 
     private void PickBackgroundImage()
