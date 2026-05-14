@@ -2407,4 +2407,103 @@ public static partial class EditorToolsExtra
         Selection.activeObject = asset;
         Debug.Log("[EditorTools] 已创建 CursorSettings: " + path);
     }
+
+    [MenuItem("Tools/Gallery/设置 Build Settings（Gallery 为启动场景）")]
+    public static void SetupBuildSettings()
+    {
+        string galleryPath = "Assets/Scenes/gallery.unity";
+        if (!System.IO.File.Exists(galleryPath))
+        {
+            Debug.LogError("找不到 gallery 场景: " + galleryPath);
+            return;
+        }
+
+        var scenes = new List<EditorBuildSettingsScene>();
+        scenes.Add(new EditorBuildSettingsScene(galleryPath, true));
+
+        foreach (var existing in EditorBuildSettings.scenes)
+        {
+            if (existing.path == galleryPath) continue;
+            scenes.Add(existing);
+        }
+
+        EditorBuildSettings.scenes = scenes.ToArray();
+        Debug.Log("[EditorTools] Build Settings 已更新，gallery 设为启动场景 (index 0)");
+
+        var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(galleryPath);
+        EditorSceneManager.OpenScene(galleryPath);
+        EnsureRuntimeBootstrap();
+    }
+
+    private static void EnsureRuntimeBootstrap()
+    {
+        var existing = Object.FindObjectOfType<RuntimeGalleryBootstrap>();
+        if (existing != null)
+        {
+            Debug.Log("[EditorTools] RuntimeGalleryBootstrap 已存在");
+            return;
+        }
+
+        var go = new GameObject("RuntimeGalleryBootstrap");
+        go.AddComponent<RuntimeGalleryBootstrap>();
+        Debug.Log("[EditorTools] 已添加 RuntimeGalleryBootstrap 到场景");
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+    }
+
+    [MenuItem("Tools/Gallery/创建 Gallery 编辑器场景")]
+    public static void CreateGalleryEditorScene()
+    {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        var camGO = new GameObject("Main Camera");
+        var cam = camGO.AddComponent<Camera>();
+        cam.orthographic = true;
+        cam.orthographicSize = 10;
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = new Color(0.1f, 0.1f, 0.15f);
+        camGO.transform.position = new Vector3(0, 0, -10);
+        camGO.tag = "MainCamera";
+        camGO.AddComponent<AudioListener>();
+
+        string playerPrefabPath = "Assets/Prefabs/Gallery/GalleryPlayer.prefab";
+        var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(playerPrefabPath);
+        if (playerPrefab != null)
+        {
+            var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
+            player.transform.position = Vector3.zero;
+        }
+        else
+        {
+            var playerGO = new GameObject("GalleryPlayer");
+            playerGO.transform.position = Vector3.zero;
+            var sr = playerGO.AddComponent<SpriteRenderer>();
+            sr.sprite = RuntimeSprite.Get();
+            sr.color = Color.cyan;
+            sr.sortingOrder = 10;
+            playerGO.transform.localScale = Vector3.one * 0.6f;
+            var rb = playerGO.AddComponent<Rigidbody2D>();
+            rb.gravityScale = 0;
+            rb.freezeRotation = true;
+            playerGO.AddComponent<BoxCollider2D>();
+            playerGO.AddComponent<GalleryPlayer>();
+        }
+
+        var esGO = new GameObject("EventSystem");
+        esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+        esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+
+        var bootstrapGO = new GameObject("RuntimeGalleryBootstrap");
+        var bootstrap = bootstrapGO.AddComponent<RuntimeGalleryBootstrap>();
+        var so = new SerializedObject(bootstrap);
+        so.FindProperty("enableEditor").boolValue = true;
+        so.FindProperty("autoLoadScene").stringValue = "";
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        string savePath = "Assets/Scenes/gallery_editor.unity";
+        if (!System.IO.Directory.Exists("Assets/Scenes"))
+            System.IO.Directory.CreateDirectory("Assets/Scenes");
+        EditorSceneManager.SaveScene(scene, savePath);
+        Debug.Log("[EditorTools] Gallery 编辑器场景已创建: " + savePath +
+            "\n双击打开场景，点 Play，按 Tab 即可使用运行时编辑器");
+    }
 }

@@ -167,4 +167,34 @@ public class GalleryFollower : MonoBehaviour
         transform.position = Vector3.MoveTowards(
             transform.position, targetPos, EffectiveFollowSpeed * Time.deltaTime);
     }
+
+    // ── Runtime setters ──
+
+    public string ElementId { get; set; }
+
+    public void SetSprite(Sprite sprite)
+    {
+        npcSprite = sprite;
+        if (sr != null) sr.sprite = sprite;
+    }
+
+    public void SetWalkFrames(Sprite[] frames, float fps = 6f)
+    {
+        walkFrames = frames;
+        animFps = fps;
+        if (frames != null && frames.Length > 0)
+        {
+            if (frameAnimator == null) frameAnimator = gameObject.AddComponent<FrameAnimator>();
+            frameAnimator.FPS = fps;
+            frameAnimator.SetFramesAndPlay(frames);
+            if (!isFollowing) frameAnimator.Pause();
+        }
+    }
+
+    public void SetFollowParams(float distance, float speed, float interval)
+    {
+        followDistance = distance;
+        followSpeed = speed;
+        recordInterval = interval;
+    }
 }

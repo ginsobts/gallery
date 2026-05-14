@@ -376,6 +376,41 @@ public class GalleryNPCDialogue : MonoBehaviour
         bubbleGO.SetActive(false);
     }
 
+    // ── Runtime setters ──
+
+    public string ElementId { get; set; }
+
+    public void SetSprite(Sprite sprite)
+    {
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null) sr.sprite = sprite;
+    }
+
+    public void SetDialogueLines(DialogueLine[] newLines) { lines = newLines; }
+
+    public void SetDialogue(bool autoTrig, float dist, KeyCode key, bool loopDialogue)
+    {
+        autoTrigger = autoTrig;
+        triggerDistance = dist;
+        dialogueKey = key;
+        loop = loopDialogue;
+    }
+
+    public void SetBubbleStyle(Color bubble, Color text, float size, float speed)
+    {
+        bubbleColor = bubble; textColor = text; textSize = size; typeSpeed = speed;
+    }
+
+    public void SetKeyEffects(bool enable, KeyCode key, float distance, FrameEffectSet effects)
+    {
+        enableKeyEffects = enable; effectKey = key; effectKeyDistance = distance; keyEffects = effects ?? new FrameEffectSet();
+    }
+
+    public void SetApproachEffects(bool enable, float distance, bool onlyOnce, FrameEffectSet effects)
+    {
+        enableApproachEffects = enable; approachEffectDistance = distance; approachEffectOnlyOnce = onlyOnce; approachEffects = effects ?? new FrameEffectSet();
+    }
+
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = new Color(0.3f, 0.9f, 0.5f, 0.3f);

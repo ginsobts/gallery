@@ -30,21 +30,29 @@ public class GalleryWeather : MonoBehaviour
 
     private struct Particle
     {
-        public GameObject go;
-        public SpriteRenderer sr;
+        public Vector3 position;
         public Vector3 velocity;
+        public Vector3 scale;
+        public float rotation;
         public float life;
         public float maxLife;
         public float size;
+        public Color color;
     }
 
     private Particle[] particles;
     private BoxCollider2D areaCol;
     private Transform playerTransform;
     private AudioSource audioSource;
-    private bool playerInside;
     private Vector3 areaCenter;
     private Vector3 areaHalf;
+
+    private bool isVisible;
+    private const float CULL_DISTANCE = 25f;
+    private Camera mainCam;
+
+    private SpriteRenderer[] particleSRs;
+    private GameObject[] particleGOs;
 
     private void Awake()
     {
@@ -54,9 +62,8 @@ public class GalleryWeather : MonoBehaviour
 
     private void Start()
     {
-        var player = FindObjectOfType<GalleryPlayer>();
-        if (player != null)
-            playerTransform = player.transform;
+        playerTransform = GalleryPlayer.Instance != null ? GalleryPlayer.Instance.transform : null;
+        mainCam = Camera.main;
 
         areaCenter = transform.position + (Vector3)areaCol.offset;
         areaHalf = Vector3.Scale(areaCol.size, transform.localScale) * 0.5f;
@@ -77,8 +84,15 @@ public class GalleryWeather : MonoBehaviour
 
     private void Update()
     {
+        if (mainCam == null) mainCam = Camera.main;
+
+        float camDist = mainCam != null
+            ? Vector2.Distance(mainCam.transform.position, areaCenter)
+            : 0f;
+        isVisible = camDist < CULL_DISTANCE + Mathf.Max(areaHalf.x, areaHalf.y);
+
         UpdateAudio();
-        UpdateParticles();
+        if (isVisible) UpdateParticles();
     }
 
     private void UpdateAudio()
@@ -100,51 +114,78 @@ public class GalleryWeather : MonoBehaviour
     private void CreateParticles()
     {
         particles = new Particle[particleCount];
+
         var sprite = weatherType == WeatherType.Fog
             ? RuntimeSprite.GetCircle(16)
             : RuntimeSprite.GetCircle(8);
 
+        particleGOs = new GameObject[particleCount];
+        particleSRs = new SpriteRenderer[particleCount];
+
+        var containerGO = new GameObject("Particles");
+        containerGO.transform.SetParent(transform, false);
+        containerGO.transform.localPosition = Vector3.zero;
+
         for (int i = 0; i < particleCount; i++)
         {
-            var go = new GameObject($"WP_{i}");
-            go.transform.SetParent(transform);
+            var go = new GameObject("P");
+            go.transform.SetParent(containerGO.transform, false);
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = sprite;
             sr.sortingOrder = 3;
 
+            particleGOs[i] = go;
+            particleSRs[i] = sr;
+
             particles[i] = new Particle
             {
-                go = go,
-                sr = sr,
                 life = Random.Range(0f, 3f),
                 maxLife = GetMaxLife(),
                 size = GetParticleSize()
             };
 
             ResetParticle(ref particles[i], true);
+            go.transform.position = particles[i].position;
+            go.transform.localScale = particles[i].scale;
+            if (particles[i].rotation != 0)
+                go.transform.rotation = Quaternion.Euler(0, 0, particles[i].rotation);
         }
     }
 
     private void UpdateParticles()
     {
+        float dt = Time.deltaTime * intensity;
+
         for (int i = 0; i < particles.Length; i++)
         {
             var p = particles[i];
-            if (p.go == null) continue;
 
-            p.life += Time.deltaTime * intensity;
+            p.life += dt;
             float t = p.life / p.maxLife;
 
             if (t >= 1f)
             {
                 ResetParticle(ref p, false);
                 particles[i] = p;
+                if (particleGOs[i] != null)
+                {
+                    particleGOs[i].transform.position = p.position;
+                    particleGOs[i].transform.localScale = p.scale;
+                    if (p.rotation != 0)
+                        particleGOs[i].transform.rotation = Quaternion.Euler(0, 0, p.rotation);
+                }
                 continue;
             }
 
-            p.go.transform.position += p.velocity * Time.deltaTime * intensity;
-            ApplyParticleStyle(ref p, t);
+            p.position += p.velocity * dt;
+            ApplyParticleColor(ref p, t);
             particles[i] = p;
+
+            if (particleGOs[i] != null)
+            {
+                particleGOs[i].transform.position = p.position;
+                particleSRs[i].color = p.color;
+            }
         }
     }
 
@@ -163,27 +204,27 @@ public class GalleryWeather : MonoBehaviour
             case WeatherType.Rain:
                 pos.y = areaCenter.y + areaHalf.y + Random.Range(0f, 2f);
                 p.velocity = new Vector3(Random.Range(-0.3f, 0.3f), -Random.Range(6f, 10f), 0);
-                p.go.transform.localScale = new Vector3(0.02f, p.size * 3f, 1f);
+                p.scale = new Vector3(0.02f, p.size * 3f, 1f);
                 break;
 
             case WeatherType.Snow:
                 pos.y = areaCenter.y + areaHalf.y + Random.Range(0f, 2f);
                 p.velocity = new Vector3(Random.Range(-0.5f, 0.5f), -Random.Range(0.5f, 1.5f), 0);
-                p.go.transform.localScale = Vector3.one * p.size;
+                p.scale = Vector3.one * p.size;
                 break;
 
             case WeatherType.Fog:
                 pos.y = Random.Range(areaCenter.y - areaHalf.y, areaCenter.y + areaHalf.y);
                 p.velocity = new Vector3(Random.Range(-0.2f, 0.2f), Random.Range(-0.05f, 0.05f), 0);
-                p.go.transform.localScale = Vector3.one * p.size;
+                p.scale = Vector3.one * p.size;
                 break;
 
             case WeatherType.Sunbeam:
                 pos.y = areaCenter.y + areaHalf.y;
                 float angle = Random.Range(-15f, 15f) * Mathf.Deg2Rad;
                 p.velocity = new Vector3(Mathf.Sin(angle) * 0.1f, -Random.Range(0.3f, 0.8f), 0);
-                p.go.transform.localScale = new Vector3(p.size * 0.3f, p.size * 8f, 1f);
-                p.go.transform.rotation = Quaternion.Euler(0, 0, -angle * Mathf.Rad2Deg);
+                p.scale = new Vector3(p.size * 0.3f, p.size * 8f, 1f);
+                p.rotation = -angle * Mathf.Rad2Deg;
                 break;
 
             case WeatherType.Fireflies:
@@ -191,14 +232,14 @@ public class GalleryWeather : MonoBehaviour
                 p.velocity = new Vector3(
                     Random.Range(-0.3f, 0.3f),
                     Random.Range(-0.2f, 0.2f), 0);
-                p.go.transform.localScale = Vector3.one * p.size;
+                p.scale = Vector3.one * p.size;
                 break;
         }
 
-        p.go.transform.position = pos;
+        p.position = pos;
     }
 
-    private void ApplyParticleStyle(ref Particle p, float t)
+    private void ApplyParticleColor(ref Particle p, float t)
     {
         float alpha;
         Color c = particleColor;
@@ -207,28 +248,28 @@ public class GalleryWeather : MonoBehaviour
         {
             case WeatherType.Rain:
                 alpha = 0.5f * intensity;
-                p.sr.color = new Color(c.r, c.g, c.b, alpha);
+                p.color = new Color(c.r, c.g, c.b, alpha);
                 break;
 
             case WeatherType.Snow:
                 alpha = Mathf.Sin(t * Mathf.PI) * 0.8f;
-                p.sr.color = new Color(c.r, c.g, c.b, alpha);
+                p.color = new Color(c.r, c.g, c.b, alpha);
                 break;
 
             case WeatherType.Fog:
                 alpha = Mathf.Sin(t * Mathf.PI) * 0.15f;
-                p.sr.color = new Color(c.r, c.g, c.b, alpha);
+                p.color = new Color(c.r, c.g, c.b, alpha);
                 break;
 
             case WeatherType.Sunbeam:
                 alpha = Mathf.Sin(t * Mathf.PI) * 0.12f;
-                p.sr.color = new Color(c.r, c.g, c.b, alpha);
+                p.color = new Color(c.r, c.g, c.b, alpha);
                 break;
 
             case WeatherType.Fireflies:
                 float flicker = (Mathf.Sin(Time.time * 5f + p.life * 10f) + 1f) * 0.5f;
                 alpha = flicker * 0.8f;
-                p.sr.color = new Color(c.r, c.g, c.b, alpha);
+                p.color = new Color(c.r, c.g, c.b, alpha);
                 p.velocity += new Vector3(
                     Mathf.Sin(Time.time * 2f + p.life) * 0.01f,
                     Mathf.Cos(Time.time * 1.5f + p.life) * 0.01f, 0);
@@ -288,11 +329,13 @@ public class GalleryWeather : MonoBehaviour
         weatherType = type;
         particleCount = count;
         particleColor = color;
-        if (particles != null)
+        if (particleGOs != null)
         {
-            for (int i = 0; i < particles.Length; i++)
-                if (particles[i].go != null) Destroy(particles[i].go);
+            for (int i = 0; i < particleGOs.Length; i++)
+                if (particleGOs[i] != null) Destroy(particleGOs[i]);
         }
+        var container = transform.Find("Particles");
+        if (container != null) Destroy(container.gameObject);
         CreateParticles();
     }
 }

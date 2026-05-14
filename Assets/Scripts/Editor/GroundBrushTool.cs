@@ -9,7 +9,7 @@ public class GroundBrushTool : EditorWindow
     private float brushSoftness = 0.6f;
     private float brushOpacity = 0.8f;
     private bool eraseMode = false;
-    private int texResolution = 1024;
+    private int texResolution = 4096;
     private bool isPainting = false;
     private Vector2 scrollPos;
 
@@ -56,7 +56,8 @@ public class GroundBrushTool : EditorWindow
         if (targetGround.groundTexture == null)
         {
             texResolution = EditorGUILayout.IntPopup("分辨率", texResolution,
-                new[] { "512", "1024", "2048" }, new[] { 512, 1024, 2048 });
+                new[] { "1024", "2048", "4096 (推荐)", "8192 (超清)" },
+                new[] { 1024, 2048, 4096, 8192 });
             eraseColor = EditorGUILayout.ColorField("初始底色", eraseColor);
             if (GUILayout.Button("创建地面贴图", GUILayout.Height(28)))
                 CreateGroundTexture();
@@ -64,6 +65,17 @@ public class GroundBrushTool : EditorWindow
         else
         {
             EditorGUILayout.LabelField($"  贴图: {targetGround.groundTexture.width} x {targetGround.groundTexture.height}");
+            float ppu = targetGround.groundTexture.width / targetGround.GroundWidth;
+            EditorGUILayout.LabelField($"  密度: {ppu:F1} px/单位" + (ppu < 60 ? "  ⚠ 偏低，建议升级" : "  ✓ 清晰"));
+
+            if (ppu < 80)
+            {
+                texResolution = EditorGUILayout.IntPopup("升级到", texResolution,
+                    new[] { "2048", "4096 (推荐)", "8192 (超清)" },
+                    new[] { 2048, 4096, 8192 });
+                if (GUILayout.Button("升级分辨率（保留已绘制内容）"))
+                    UpgradeResolution(texResolution);
+            }
         }
 
         // ── 笔刷模式 ──
@@ -309,7 +321,7 @@ public class GroundBrushTool : EditorWindow
             imp.textureCompression = TextureImporterCompression.Uncompressed;
             imp.filterMode = FilterMode.Bilinear;
             imp.wrapMode = TextureWrapMode.Clamp;
-            imp.maxTextureSize = texResolution;
+            imp.maxTextureSize = Mathf.Max(texResolution, 4096);
             imp.sRGBTexture = true;
             imp.SaveAndReimport();
         }
@@ -318,6 +330,49 @@ public class GroundBrushTool : EditorWindow
         var so = new SerializedObject(targetGround);
         so.FindProperty("groundTexture").objectReferenceValue = loaded;
         so.ApplyModifiedProperties();
+        Repaint();
+    }
+
+    private void UpgradeResolution(int newRes)
+    {
+        Texture2D old = targetGround.groundTexture;
+        if (old == null) return;
+        if (newRes <= old.width) { Debug.Log("新分辨率必须大于当前分辨率"); return; }
+
+        Texture2D upgraded = new Texture2D(newRes, newRes, TextureFormat.RGBA32, false);
+        upgraded.filterMode = FilterMode.Bilinear;
+        upgraded.wrapMode = TextureWrapMode.Clamp;
+
+        for (int y = 0; y < newRes; y++)
+        {
+            for (int x = 0; x < newRes; x++)
+            {
+                float u = (float)x / (newRes - 1);
+                float v = (float)y / (newRes - 1);
+                upgraded.SetPixel(x, y, old.GetPixelBilinear(u, v));
+            }
+        }
+        upgraded.Apply();
+
+        string path = AssetDatabase.GetAssetPath(old);
+        File.WriteAllBytes(path, upgraded.EncodeToPNG());
+        DestroyImmediate(upgraded);
+
+        AssetDatabase.ImportAsset(path);
+        var imp = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (imp != null)
+        {
+            imp.isReadable = true;
+            imp.textureCompression = TextureImporterCompression.Uncompressed;
+            imp.maxTextureSize = Mathf.Max(newRes, 4096);
+            imp.SaveAndReimport();
+        }
+
+        var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        var so = new SerializedObject(targetGround);
+        so.FindProperty("groundTexture").objectReferenceValue = loaded;
+        so.ApplyModifiedProperties();
+        Debug.Log($"分辨率已升级: {old.width} → {newRes} ({newRes / targetGround.GroundWidth:F0} px/单位)");
         Repaint();
     }
 

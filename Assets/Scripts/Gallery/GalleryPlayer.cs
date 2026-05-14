@@ -19,6 +19,7 @@ public class GalleryPlayer : MonoBehaviour
     public static bool FreezeMovement => freezeCount > 0;
     public static void Freeze() { freezeCount++; }
     public static void Unfreeze() { freezeCount = Mathf.Max(0, freezeCount - 1); }
+    public static void ForceUnfreeze() { freezeCount = 0; }
 
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;

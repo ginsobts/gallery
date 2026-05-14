@@ -469,6 +469,36 @@ public class GalleryVideo : MonoBehaviour
         if (videoSprite != null) Destroy(videoSprite);
     }
 
+    // ── Runtime setters ──
+
+    public string ElementId { get; set; }
+
+    public void SetVideoUrl(string url)
+    {
+        if (videoPlayer == null) return;
+        videoPlayer.source = UnityEngine.Video.VideoSource.Url;
+        videoPlayer.url = url;
+        videoPlayer.Stop();
+        isPlaying = false;
+        autoPlayTriggered = false;
+    }
+
+    public void SetCoverImage(Sprite cover) { coverImage = cover; if (!isPlaying && sr != null) sr.sprite = cover; }
+    public void SetAutoPlay(bool val) { autoPlay = val; }
+    public void SetLoop(bool val) { loop = val; if (videoPlayer != null) videoPlayer.isLooping = val; }
+    public void SetAudio(bool enable, float volume, float range) { enableAudio = enable; maxVolume = volume; audioRange = range; }
+    public void SetFadeIn(bool enable, float distance, float speed) { fadeInOnApproach = enable; fadeDistance = distance; fadeSpeed = speed; }
+    public void SetTriggerRange(float range) { triggerRange = range; }
+
+    public void SetKeyEffects(bool enable, KeyCode key, float distance, FrameEffectSet effects)
+    {
+        enableKeyEffects = enable; effectKey = key; effectKeyDistance = distance; keyEffects = effects ?? new FrameEffectSet();
+    }
+    public void SetApproachEffects(bool enable, float distance, bool onlyOnce, FrameEffectSet effects)
+    {
+        enableApproachEffects = enable; approachEffectDistance = distance; approachEffectOnlyOnce = onlyOnce; approachEffects = effects ?? new FrameEffectSet();
+    }
+
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = new Color(0.3f, 0.7f, 1f, 0.3f);

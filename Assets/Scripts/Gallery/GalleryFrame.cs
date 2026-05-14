@@ -51,7 +51,6 @@ public class FrameEffectSet
 }
 
 [RequireComponent(typeof(SpriteRenderer))]
-[RequireComponent(typeof(BoxCollider2D))]
 public class GalleryFrame : MonoBehaviour
 {
     [Header("图片")]
@@ -99,7 +98,7 @@ public class GalleryFrame : MonoBehaviour
     {
         sr = GetComponent<SpriteRenderer>();
         col = GetComponent<BoxCollider2D>();
-        col.isTrigger = false;
+        if (col != null) col.isTrigger = false;
 
         if (image != null) { sr.sprite = image; sr.color = Color.white; }
         if (sr.sprite != null) sr.sortingOrder = sortingOrder;
@@ -116,31 +115,42 @@ public class GalleryFrame : MonoBehaviour
         }
     }
 
+    private bool needsUpdate;
+    private int staggerFrame;
+
     private void Start()
     {
-        var player = GalleryPlayer.Instance;
-        if (player != null) playerTransform = player.transform;
+        playerTransform = GalleryPlayer.Instance != null ? GalleryPlayer.Instance.transform : null;
         if (!string.IsNullOrEmpty(caption)) CreateCaption();
+        needsUpdate = fadeInOnApproach || enableKeyInteract || enableApproachTrigger;
+        staggerFrame = Random.Range(0, 3);
     }
 
     private void Update()
     {
-        if (playerTransform == null) return;
+        if (!needsUpdate || playerTransform == null) return;
+
+        if ((Time.frameCount + staggerFrame) % 2 != 0 && !keyInteractReady)
+            return;
+
+        float playerDist = Vector2.Distance(transform.position, playerTransform.position);
 
         if (fadeInOnApproach && !revealed)
         {
-            float dist = Vector2.Distance(transform.position, playerTransform.position);
-            if (dist <= fadeDistance)
+            if (playerDist <= fadeDistance)
             {
                 currentAlpha = Mathf.MoveTowards(currentAlpha, 1f, fadeSpeed * Time.deltaTime);
                 sr.color = new Color(sr.color.r, sr.color.g, sr.color.b, currentAlpha);
                 if (captionTM != null)
                     captionTM.color = new Color(captionColor.r, captionColor.g, captionColor.b, currentAlpha * captionColor.a);
-                if (currentAlpha >= 1f) revealed = true;
+                if (currentAlpha >= 1f)
+                {
+                    revealed = true;
+                    if (!enableKeyInteract && !enableApproachTrigger)
+                        needsUpdate = false;
+                }
             }
         }
-
-        float playerDist = Vector2.Distance(transform.position, playerTransform.position);
 
         if (enableApproachTrigger && !approachTriggered)
         {
@@ -352,6 +362,57 @@ public class GalleryFrame : MonoBehaviour
         if (newImage != null) { image = newImage; sr.sprite = newImage; sr.color = new Color(sr.color.r, sr.color.g, sr.color.b, currentAlpha); }
         if (!string.IsNullOrEmpty(newCaption)) { caption = newCaption; if (captionTM != null) captionTM.text = newCaption; }
     }
+
+    // ── Runtime setters for RuntimeSceneBuilder ──
+
+    public string ElementId { get; set; }
+
+    public void SetFadeIn(bool enable, float distance = 5f, float speed = 2f)
+    {
+        fadeInOnApproach = enable;
+        fadeDistance = distance;
+        fadeSpeed = speed;
+    }
+
+    public void SetCaption(string text, Color color, float size)
+    {
+        caption = text;
+        captionColor = color;
+        captionSize = size;
+    }
+
+    public void SetKeyInteract(bool enable, KeyCode key, float distance, FrameEffectSet effects)
+    {
+        enableKeyInteract = enable;
+        interactKey = key;
+        interactDistance = distance;
+        keyEffects = effects ?? new FrameEffectSet();
+    }
+
+    public void SetApproachTrigger(bool enable, float distance, bool onlyOnce, FrameEffectSet effects)
+    {
+        enableApproachTrigger = enable;
+        approachDistance = distance;
+        approachOnlyOnce = onlyOnce;
+        approachEffects = effects ?? new FrameEffectSet();
+    }
+
+    public void SetSortingOrder(int order)
+    {
+        sortingOrder = order;
+        if (sr != null) sr.sortingOrder = order;
+    }
+
+    public FrameEffectSet GetKeyEffects() => keyEffects;
+    public FrameEffectSet GetApproachEffects() => approachEffects;
+    public bool IsKeyInteractEnabled => enableKeyInteract;
+    public bool IsApproachTriggerEnabled => enableApproachTrigger;
+    public KeyCode GetInteractKey() => interactKey;
+    public float GetInteractDistance() => interactDistance;
+    public float GetApproachDistance() => approachDistance;
+    public bool GetApproachOnlyOnce() => approachOnlyOnce;
+    public Sprite GetImage() => image;
+    public string GetCaption() => caption;
 
     private void OnValidate()
     {
