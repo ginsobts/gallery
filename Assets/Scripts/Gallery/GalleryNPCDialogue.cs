@@ -9,6 +9,7 @@ public class GalleryNPCDialogue : MonoBehaviour
         public string text;
         [Tooltip("该句停留时间")]
         public float duration;
+        public int textEffect;
     }
 
     [Header("对话内容")]
@@ -46,6 +47,7 @@ public class GalleryNPCDialogue : MonoBehaviour
     private SpriteRenderer bubbleSR;
     private TextMesh textMesh;
     private GalleryTypewriter typewriter;
+    private GalleryTextEffect textEffect;
 
     private int currentLine = -1;
     private float lineTimer;
@@ -98,6 +100,7 @@ public class GalleryNPCDialogue : MonoBehaviour
 
         if (typeSpeed > 0)
             typewriter = textGO.AddComponent<GalleryTypewriter>();
+        textEffect = textGO.AddComponent<GalleryTextEffect>();
     }
 
     private void Update()
@@ -109,8 +112,9 @@ public class GalleryNPCDialogue : MonoBehaviour
             return;
         }
 
-        float dist = Vector2.Distance(transform.position, playerTransform.position);
-        playerInRange = dist <= triggerDistance;
+        Vector2 diff = (Vector2)transform.position - (Vector2)playerTransform.position;
+        float sqrDist = diff.sqrMagnitude;
+        playerInRange = sqrDist <= triggerDistance * triggerDistance;
 
         if (!dialogueActive)
         {
@@ -128,14 +132,14 @@ public class GalleryNPCDialogue : MonoBehaviour
         if (dialogueActive && !playerInRange && autoTrigger)
             EndDialogue();
 
-        UpdateEffects(dist);
+        UpdateEffects(sqrDist);
     }
 
-    private void UpdateEffects(float dist)
+    private void UpdateEffects(float sqrDist)
     {
         if (enableApproachEffects && !approachEffectTriggered)
         {
-            if (dist <= approachEffectDistance)
+            if (sqrDist <= approachEffectDistance * approachEffectDistance)
             {
                 ExecuteEffects(approachEffects);
                 if (approachEffectOnlyOnce) approachEffectTriggered = true;
@@ -143,12 +147,12 @@ public class GalleryNPCDialogue : MonoBehaviour
         }
         if (enableApproachEffects && !approachEffectOnlyOnce && approachEffectTriggered)
         {
-            if (dist > approachEffectDistance) approachEffectTriggered = false;
+            if (sqrDist > approachEffectDistance * approachEffectDistance) approachEffectTriggered = false;
         }
 
         if (!enableKeyEffects) return;
 
-        bool inRange = dist <= effectKeyDistance;
+        bool inRange = sqrDist <= effectKeyDistance * effectKeyDistance;
         if (inRange && !effectKeyReady)
         {
             effectKeyReady = true;
@@ -167,7 +171,7 @@ public class GalleryNPCDialogue : MonoBehaviour
     private void ExecuteEffects(FrameEffectSet fx)
     {
         if (fx.zoom) ZoomNPC();
-        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration);
+        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration, fx.textEffect);
         if (fx.playSound && fx.soundClip != null) PlayEffectSound(fx.soundClip, fx.soundVolume);
         if (fx.changeBGM && fx.bgmClip != null) ChangeBGM(fx.bgmClip, fx.bgmVolume);
         if (fx.changeWeather) ChangeWeather(fx.weatherType, fx.weatherParticles, fx.weatherColor);
@@ -213,14 +217,13 @@ public class GalleryNPCDialogue : MonoBehaviour
         overlay.AddComponent<ZoomOverlayClose>();
     }
 
-    private void ShowTextPopup(string text, float duration)
+    private void ShowTextPopup(string text, float duration, int textEffect = 0)
     {
         var cam = Camera.main;
         var go = new GameObject("TextPopup");
         go.transform.position = cam.transform.position + Vector3.forward * 4.8f + Vector3.down * (cam.orthographicSize * 0.6f);
 
         var tm = go.AddComponent<TextMesh>();
-        tm.text = text;
         tm.characterSize = 0.08f;
         tm.fontSize = 80;
         tm.anchor = TextAnchor.MiddleCenter;
@@ -228,9 +231,8 @@ public class GalleryNPCDialogue : MonoBehaviour
         tm.color = Color.white;
         go.GetComponent<MeshRenderer>().sortingOrder = 910;
 
-        var tw = go.AddComponent<GalleryTypewriter>();
-        tw.Play(text);
-        Destroy(go, duration);
+        var fx = go.AddComponent<GalleryTextEffect>();
+        fx.Play(text, (GalleryTextEffect.TextEffectType)textEffect, duration);
     }
 
     private void PlayEffectSound(AudioClip clip, float volume)
@@ -340,10 +342,18 @@ public class GalleryNPCDialogue : MonoBehaviour
         var line = lines[currentLine];
         lineTimer = 0f;
 
-        if (typewriter != null && typeSpeed > 0)
-            typewriter.Play(line.text);
+        if (line.textEffect == 0)
+        {
+            if (typewriter != null && typeSpeed > 0)
+                typewriter.Play(line.text);
+            else
+                textMesh.text = line.text;
+        }
         else
-            textMesh.text = line.text;
+        {
+            float dur = line.duration > 0 ? line.duration : 2f;
+            textEffect.Play(line.text, (GalleryTextEffect.TextEffectType)line.textEffect, dur, false);
+        }
     }
 
     private void UpdateDialogue()
@@ -351,7 +361,7 @@ public class GalleryNPCDialogue : MonoBehaviour
         if (currentLine < 0 || currentLine >= lines.Length) return;
 
         var line = lines[currentLine];
-        bool textDone = typewriter == null || typewriter.IsDone;
+        bool textDone = (typewriter == null || typewriter.IsDone) && (textEffect == null || textEffect.IsDone);
 
         if (textDone)
         {

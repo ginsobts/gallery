@@ -11,6 +11,7 @@ public class FrameEffectSet
     [TextArea(2, 5)]
     public string text = "";
     public float textDuration = 4f;
+    public int textEffect = 0;
 
     [Tooltip("播放音效")]
     public bool playSound = false;
@@ -134,7 +135,14 @@ public class GalleryFrame : MonoBehaviour
 
     private void Update()
     {
-        if (!needsUpdate || playerTransform == null) return;
+        if (!needsUpdate) return;
+        if (playerTransform == null)
+        {
+            if (GalleryPlayer.Instance != null)
+                playerTransform = GalleryPlayer.Instance.transform;
+            else
+                return;
+        }
 
         if ((Time.frameCount + staggerFrame) % 3 != 0 && !keyInteractReady)
             return;
@@ -194,7 +202,7 @@ public class GalleryFrame : MonoBehaviour
     private void ExecuteEffects(FrameEffectSet fx)
     {
         if (fx.zoom) ZoomImage();
-        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration);
+        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration, fx.textEffect);
         if (fx.playSound && fx.soundClip != null) PlaySound(fx.soundClip, fx.soundVolume);
         if (fx.changeBGM && fx.bgmClip != null) ChangeBGM(fx.bgmClip, fx.bgmVolume);
         if (fx.changeWeather) ChangeWeather(fx.weatherType, fx.weatherParticles, fx.weatherColor);
@@ -239,14 +247,13 @@ public class GalleryFrame : MonoBehaviour
         overlay.AddComponent<ZoomOverlayClose>();
     }
 
-    private void ShowTextPopup(string text, float duration)
+    private void ShowTextPopup(string text, float duration, int textEffect = 0)
     {
         var cam = Camera.main;
         var go = new GameObject("TextPopup");
         go.transform.position = cam.transform.position + Vector3.forward * 4.8f + Vector3.down * (cam.orthographicSize * 0.6f);
 
         var tm = go.AddComponent<TextMesh>();
-        tm.text = text;
         tm.characterSize = 0.08f;
         tm.fontSize = 80;
         tm.anchor = TextAnchor.MiddleCenter;
@@ -254,10 +261,8 @@ public class GalleryFrame : MonoBehaviour
         tm.color = Color.white;
         go.GetComponent<MeshRenderer>().sortingOrder = 910;
 
-        var tw = go.AddComponent<GalleryTypewriter>();
-        tw.Play(text);
-
-        Destroy(go, duration);
+        var fx = go.AddComponent<GalleryTextEffect>();
+        fx.Play(text, (GalleryTextEffect.TextEffectType)textEffect, duration);
     }
 
     private void PlaySound(AudioClip clip, float volume)
@@ -296,7 +301,14 @@ public class GalleryFrame : MonoBehaviour
     private void ChangeWeather(GalleryWeather.WeatherType type, int particles, Color color)
     {
         var weather = FindObjectOfType<GalleryWeather>();
-        if (weather == null) return;
+        if (weather == null)
+        {
+            var go = new GameObject("SceneWeather");
+            var col2d = go.AddComponent<BoxCollider2D>();
+            col2d.isTrigger = true;
+            col2d.size = new Vector2(200f, 100f);
+            weather = go.AddComponent<GalleryWeather>();
+        }
         weather.SetWeather(type, particles, color);
     }
 

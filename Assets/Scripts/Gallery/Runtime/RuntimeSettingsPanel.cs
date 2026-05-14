@@ -272,6 +272,8 @@ public class RuntimeSettingsPanel : MonoBehaviour
                 int idx = i;
                 RuntimeUIHelper.TextField(content, $"行{i + 1} 文字", nd.lines[i].text, s => { nd.lines[idx].text = s; needsRebuild = true; });
                 RuntimeUIHelper.FloatField(content, $"行{i + 1} 时长", nd.lines[i].duration, f => { nd.lines[idx].duration = f; needsRebuild = true; });
+                RuntimeUIHelper.DropdownField(content, $"行{i + 1} 效果", TextEffectNames,
+                    Mathf.Clamp(nd.lines[i].textEffect, 0, TextEffectNames.Length - 1), v => { nd.lines[idx].textEffect = v; needsRebuild = true; });
                 RuntimeUIHelper.Btn(content, "删除行 " + (i + 1), () => { RemoveDialogueLine(nd, idx); ScheduleRebuild(); }, RuntimeUIHelper.AccentRed);
                 RuntimeUIHelper.Spacer(content, 2);
             }
@@ -329,6 +331,10 @@ public class RuntimeSettingsPanel : MonoBehaviour
     }
 
     // ── Interaction Effects ──
+
+    private static readonly string[] WeatherNames = { "雨", "雪", "雾", "光束", "萤火虫" };
+    private static readonly string[] TextEffectNames = { "打字机", "渐隐", "上滑", "下滑", "缩放", "闪烁", "波浪", "故障" };
+
     private void BuildInteractionSection()
     {
         RuntimeUIHelper.Spacer(content, 8);
@@ -378,6 +384,8 @@ public class RuntimeSettingsPanel : MonoBehaviour
         {
             RuntimeUIHelper.TextField(content, "文字内容", fx.text, s => { fx.text = s; needsRebuild = true; });
             RuntimeUIHelper.FloatField(content, "显示时长", fx.textDuration, f => { fx.textDuration = f; needsRebuild = true; });
+            RuntimeUIHelper.DropdownField(content, "文字效果", TextEffectNames,
+                Mathf.Clamp(fx.textEffect, 0, TextEffectNames.Length - 1), i => { fx.textEffect = i; needsRebuild = true; });
         }
 
         RuntimeUIHelper.ToggleField(content, "播放音效", fx.playSound, v => { fx.playSound = v; needsRebuild = true; ScheduleRebuild(); });
@@ -421,7 +429,11 @@ public class RuntimeSettingsPanel : MonoBehaviour
         RuntimeUIHelper.ToggleField(content, "改变天气", fx.changeWeather, v => { fx.changeWeather = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.changeWeather)
         {
-            RuntimeUIHelper.IntField(content, "天气类型", fx.weatherType, i => { fx.weatherType = i; needsRebuild = true; });
+            RuntimeUIHelper.DropdownField(content, "天气类型", WeatherNames, Mathf.Clamp(fx.weatherType, 0, WeatherNames.Length - 1), i =>
+            {
+                fx.weatherType = i;
+                needsRebuild = true;
+            });
             RuntimeUIHelper.IntField(content, "粒子数量", fx.weatherParticles, i => { fx.weatherParticles = i; needsRebuild = true; });
             BuildColorField("天气颜色", fx.weatherColor, arr => { fx.weatherColor = arr; needsRebuild = true; });
         }
@@ -439,7 +451,23 @@ public class RuntimeSettingsPanel : MonoBehaviour
 
         RuntimeUIHelper.ToggleField(content, "加载场景", fx.loadScene, v => { fx.loadScene = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.loadScene)
-            RuntimeUIHelper.TextField(content, "场景名", fx.sceneName, s => { fx.sceneName = s; needsRebuild = true; });
+        {
+            string[] scenes = SceneDataHelper.ListScenes();
+            if (scenes.Length > 0)
+            {
+                int curIdx = System.Array.IndexOf(scenes, fx.sceneName);
+                if (curIdx < 0) curIdx = 0;
+                RuntimeUIHelper.DropdownField(content, "目标场景", scenes, curIdx, i =>
+                {
+                    fx.sceneName = scenes[i];
+                    needsRebuild = true;
+                });
+            }
+            else
+            {
+                RuntimeUIHelper.TextField(content, "场景名", fx.sceneName, s => { fx.sceneName = s; needsRebuild = true; });
+            }
+        }
 
         RuntimeUIHelper.ToggleField(content, "开关物体", fx.toggleObject, v => { fx.toggleObject = v; needsRebuild = true; ScheduleRebuild(); });
         if (fx.toggleObject)

@@ -8,7 +8,6 @@ public class RuntimeElementHandle : MonoBehaviour
     private GameObject root;
     private RectTransform rootRT;
     private GameObject actionBar;
-    private GameObject handleBar;
     private Text sizeLabel;
 
     private GameObject target;
@@ -17,14 +16,30 @@ public class RuntimeElementHandle : MonoBehaviour
 
     private CanvasScaler cachedScaler;
     private RectTransform cachedActionBarRT;
-    private RectTransform cachedHandleBarRT;
     private SpriteRenderer cachedTargetSR;
 
-    private enum DragMode { None, Move, ScaleH, ScaleV, ScaleUniform }
+    private enum DragMode { None, Move, ScaleLeft, ScaleRight, ScaleTop, ScaleBottom, ScaleTL, ScaleTR, ScaleBL, ScaleBR }
     private DragMode dragMode;
-    private Vector3 dragStartMouse;
+    private Vector3 dragStartWorldMouse;
     private Vector3 dragStartScale;
     private Vector3 dragStartPos;
+
+    private GameObject[] cornerHandles = new GameObject[4];
+    private GameObject[] edgeHandles = new GameObject[4];
+    private GameObject[] borderLines = new GameObject[4];
+    private GameObject sizeLabelGO;
+
+    private RectTransform[] cornerRTs = new RectTransform[4];
+    private RectTransform[] edgeRTs = new RectTransform[4];
+    private RectTransform[] borderRTs = new RectTransform[4];
+    private RectTransform sizeLabelRT;
+
+    private Vector3 lastTargetPos;
+    private Vector3 lastTargetScale;
+    private int lastScreenW, lastScreenH;
+
+    private const float HANDLE_SIZE = 10f;
+    private const float BORDER_THICKNESS = 2.5f;
 
     public void Attach(GameObject go, ElementData elemData)
     {
@@ -46,13 +61,39 @@ public class RuntimeElementHandle : MonoBehaviour
         if (root != null) root.SetActive(false);
     }
 
+    public bool IsAttached => target != null && root != null && root.activeSelf;
+
+    public bool IsDragging => dragMode != DragMode.None;
+
+    public void StartMoveFromWorld(Vector3 worldPos)
+    {
+        if (target == null) return;
+        dragMode = DragMode.Move;
+        dragStartWorldMouse = worldPos;
+        dragStartPos = target.transform.position;
+    }
+
     private void LateUpdate()
     {
         if (target == null) { if (root != null) root.SetActive(false); return; }
         if (root == null || !root.activeSelf) return;
 
         HandleDragInput();
-        UpdatePosition();
+
+        bool dirty = dragMode != DragMode.None
+            || target.transform.position != lastTargetPos
+            || target.transform.localScale != lastTargetScale
+            || Screen.width != lastScreenW
+            || Screen.height != lastScreenH;
+
+        if (dirty)
+        {
+            UpdatePosition();
+            lastTargetPos = target.transform.position;
+            lastTargetScale = target.transform.localScale;
+            lastScreenW = Screen.width;
+            lastScreenH = Screen.height;
+        }
     }
 
     private void HandleDragInput()
@@ -61,50 +102,111 @@ public class RuntimeElementHandle : MonoBehaviour
 
         if (Input.GetMouseButton(0))
         {
-            Vector3 mouseDelta = Input.mousePosition - dragStartMouse;
-            var editor = RuntimeEditor.Instance;
-            if (editor == null) return;
+            if (cam == null) return;
+            Vector3 worldNow = cam.ScreenToWorldPoint(Input.mousePosition);
+            worldNow.z = 0;
 
             switch (dragMode)
             {
                 case DragMode.Move:
-                    if (cam != null)
-                    {
-                        Vector3 worldNow = cam.ScreenToWorldPoint(Input.mousePosition);
-                        Vector3 worldStart = cam.ScreenToWorldPoint(dragStartMouse);
-                        worldNow.z = 0; worldStart.z = 0;
-                        target.transform.position = dragStartPos + (worldNow - worldStart);
-                    }
+                    target.transform.position = dragStartPos + (worldNow - dragStartWorldMouse);
                     break;
-                case DragMode.ScaleH:
-                    float dxH = mouseDelta.x * 0.005f;
-                    editor.ScaleSelected(dxH, 0);
-                    dragStartMouse = Input.mousePosition;
+                case DragMode.ScaleLeft:
+                    ApplyEdgeScale(worldNow, -1, 0);
                     break;
-                case DragMode.ScaleV:
-                    float dyV = mouseDelta.y * 0.005f;
-                    editor.ScaleSelected(0, dyV);
-                    dragStartMouse = Input.mousePosition;
+                case DragMode.ScaleRight:
+                    ApplyEdgeScale(worldNow, 1, 0);
                     break;
-                case DragMode.ScaleUniform:
-                    float avg = (mouseDelta.x + mouseDelta.y) * 0.5f * 0.005f;
-                    editor.ScaleSelected(avg, avg);
-                    dragStartMouse = Input.mousePosition;
+                case DragMode.ScaleTop:
+                    ApplyEdgeScale(worldNow, 0, 1);
+                    break;
+                case DragMode.ScaleBottom:
+                    ApplyEdgeScale(worldNow, 0, -1);
+                    break;
+                case DragMode.ScaleTL:
+                case DragMode.ScaleTR:
+                case DragMode.ScaleBL:
+                case DragMode.ScaleBR:
+                    ApplyCornerScale(worldNow);
                     break;
             }
             UpdateSizeLabel();
         }
         else
         {
+            if (dragMode != DragMode.None && target != null && data != null)
+            {
+                data.x = target.transform.position.x;
+                data.y = target.transform.position.y;
+                data.scaleX = target.transform.localScale.x;
+                data.scaleY = target.transform.localScale.y;
+            }
             dragMode = DragMode.None;
         }
     }
 
+    private void ApplyEdgeScale(Vector3 worldNow, int axisX, int axisY)
+    {
+        Vector3 delta = worldNow - dragStartWorldMouse;
+        Vector3 newScale = dragStartScale;
+
+        if (axisX != 0)
+        {
+            float dx = delta.x * axisX;
+            float spriteW = GetSpriteBoundsWidth();
+            newScale.x = Mathf.Max(0.1f, dragStartScale.x + dx / spriteW);
+        }
+        if (axisY != 0)
+        {
+            float dy = delta.y * axisY;
+            float spriteH = GetSpriteBoundsHeight();
+            newScale.y = Mathf.Max(0.1f, dragStartScale.y + dy / spriteH);
+        }
+
+        target.transform.localScale = newScale;
+    }
+
+    private void ApplyCornerScale(Vector3 worldNow)
+    {
+        Vector3 delta = worldNow - dragStartWorldMouse;
+        float spriteW = GetSpriteBoundsWidth();
+        float spriteH = GetSpriteBoundsHeight();
+
+        float dx = Mathf.Abs(delta.x) / spriteW;
+        float dy = Mathf.Abs(delta.y) / spriteH;
+        float avgDelta = (dx + dy) * 0.5f;
+
+        float sign = (delta.x + delta.y) > 0 ? 1f : -1f;
+        if (dragMode == DragMode.ScaleTL || dragMode == DragMode.ScaleBR)
+            sign = (-delta.x + delta.y) > 0 ? 1f : -1f;
+
+        float factor = avgDelta * sign;
+        float newUniform = Mathf.Max(0.1f, dragStartScale.x + factor);
+        float ratio = dragStartScale.y / Mathf.Max(0.001f, dragStartScale.x);
+        target.transform.localScale = new Vector3(newUniform, newUniform * ratio, 1f);
+    }
+
+    private float GetSpriteBoundsWidth()
+    {
+        if (cachedTargetSR != null && cachedTargetSR.sprite != null)
+            return cachedTargetSR.sprite.bounds.size.x;
+        return 1f;
+    }
+
+    private float GetSpriteBoundsHeight()
+    {
+        if (cachedTargetSR != null && cachedTargetSR.sprite != null)
+            return cachedTargetSR.sprite.bounds.size.y;
+        return 1f;
+    }
+
     private void StartDrag(DragMode mode)
     {
-        if (target == null) return;
+        if (target == null || cam == null) return;
         dragMode = mode;
-        dragStartMouse = Input.mousePosition;
+        Vector3 w = cam.ScreenToWorldPoint(Input.mousePosition);
+        w.z = 0;
+        dragStartWorldMouse = w;
         dragStartScale = target.transform.localScale;
         dragStartPos = target.transform.position;
     }
@@ -130,7 +232,7 @@ public class RuntimeElementHandle : MonoBehaviour
         float scaleY = cachedScaler.referenceResolution.y / Screen.height;
         float scale = Mathf.Lerp(scaleX, scaleY, cachedScaler.matchWidthOrHeight);
 
-        float pad = 8f;
+        float pad = 4f;
         float x0 = min.x * scale - pad;
         float y0 = min.y * scale - pad;
         float x1 = max.x * scale + pad;
@@ -142,7 +244,30 @@ public class RuntimeElementHandle : MonoBehaviour
         rootRT.sizeDelta = new Vector2(w, h);
 
         cachedActionBarRT.anchoredPosition = new Vector2(w * 0.5f, h + 4);
-        cachedHandleBarRT.anchoredPosition = new Vector2(w * 0.5f, -4);
+
+        cornerRTs[0].anchoredPosition = new Vector2(0, 0);
+        cornerRTs[1].anchoredPosition = new Vector2(w, 0);
+        cornerRTs[2].anchoredPosition = new Vector2(0, h);
+        cornerRTs[3].anchoredPosition = new Vector2(w, h);
+
+        float hw = w * 0.5f;
+        float hh = h * 0.5f;
+        edgeRTs[0].anchoredPosition = new Vector2(hw, 0);
+        edgeRTs[1].anchoredPosition = new Vector2(hw, h);
+        edgeRTs[2].anchoredPosition = new Vector2(0, hh);
+        edgeRTs[3].anchoredPosition = new Vector2(w, hh);
+
+        borderRTs[0].anchoredPosition = new Vector2(hw, 0);
+        borderRTs[0].sizeDelta = new Vector2(w, BORDER_THICKNESS);
+        borderRTs[1].anchoredPosition = new Vector2(hw, h);
+        borderRTs[1].sizeDelta = new Vector2(w, BORDER_THICKNESS);
+        borderRTs[2].anchoredPosition = new Vector2(0, hh);
+        borderRTs[2].sizeDelta = new Vector2(BORDER_THICKNESS, h);
+        borderRTs[3].anchoredPosition = new Vector2(w, hh);
+        borderRTs[3].sizeDelta = new Vector2(BORDER_THICKNESS, h);
+
+        if (sizeLabelRT != null)
+            sizeLabelRT.anchoredPosition = new Vector2(hw, -18);
     }
 
     private string lastSizeText;
@@ -151,7 +276,7 @@ public class RuntimeElementHandle : MonoBehaviour
     {
         if (sizeLabel == null || target == null) return;
         Vector3 s = target.transform.localScale;
-        string newText = s.x.ToString("F1") + " x " + s.y.ToString("F1");
+        string newText = s.x.ToString("F2") + " x " + s.y.ToString("F2");
         if (newText != lastSizeText)
         {
             lastSizeText = newText;
@@ -175,25 +300,76 @@ public class RuntimeElementHandle : MonoBehaviour
         rootRT.anchorMax = Vector2.zero;
         rootRT.pivot = Vector2.zero;
 
-        CreateBorder();
+        CreateBorderLines();
+        CreateCornerHandles();
+        CreateEdgeHandles();
         CreateActionBar();
-        CreateHandleBar();
+        CreateSizeLabel();
 
         cachedActionBarRT = actionBar.GetComponent<RectTransform>();
-        cachedHandleBarRT = handleBar.GetComponent<RectTransform>();
     }
 
-    private void CreateBorder()
+    private void CreateBorderLines()
     {
-        var border = new GameObject("Border");
-        border.transform.SetParent(root.transform, false);
-        var rt = border.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
-        border.AddComponent<Outline>();
-        var img = border.AddComponent<Image>();
-        img.color = new Color(0.3f, 0.7f, 1f, 0.15f);
-        img.raycastTarget = false;
+        for (int i = 0; i < 4; i++)
+        {
+            var go = new GameObject("Border_" + i);
+            go.transform.SetParent(root.transform, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+            img.raycastTarget = false;
+            borderLines[i] = go;
+            borderRTs[i] = rt;
+        }
+    }
+
+    private void CreateCornerHandles()
+    {
+        cornerHandles[0] = CreateHandle("Corner_BL", DragMode.ScaleBL);
+        cornerHandles[1] = CreateHandle("Corner_BR", DragMode.ScaleBR);
+        cornerHandles[2] = CreateHandle("Corner_TL", DragMode.ScaleTL);
+        cornerHandles[3] = CreateHandle("Corner_TR", DragMode.ScaleTR);
+        for (int i = 0; i < 4; i++)
+            cornerRTs[i] = cornerHandles[i].GetComponent<RectTransform>();
+    }
+
+    private void CreateEdgeHandles()
+    {
+        edgeHandles[0] = CreateHandle("Edge_Bottom", DragMode.ScaleBottom);
+        edgeHandles[1] = CreateHandle("Edge_Top", DragMode.ScaleTop);
+        edgeHandles[2] = CreateHandle("Edge_Left", DragMode.ScaleLeft);
+        edgeHandles[3] = CreateHandle("Edge_Right", DragMode.ScaleRight);
+        for (int i = 0; i < 4; i++)
+            edgeRTs[i] = edgeHandles[i].GetComponent<RectTransform>();
+    }
+
+    private GameObject CreateHandle(string name, DragMode mode)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(root.transform, false);
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(HANDLE_SIZE, HANDLE_SIZE);
+        var img = go.AddComponent<Image>();
+        img.color = Color.white;
+        img.raycastTarget = true;
+
+        var outline = go.AddComponent<Outline>();
+        outline.effectColor = new Color(0.1f, 0.1f, 0.1f, 1f);
+        outline.effectDistance = new Vector2(1, -1);
+
+        var trigger = go.AddComponent<EventTrigger>();
+        var pDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+        pDown.callback.AddListener(e => StartDrag(mode));
+        trigger.triggers.Add(pDown);
+
+        return go;
     }
 
     private void CreateActionBar()
@@ -201,8 +377,10 @@ public class RuntimeElementHandle : MonoBehaviour
         actionBar = new GameObject("ActionBar");
         actionBar.transform.SetParent(root.transform, false);
         var rt = actionBar.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
         rt.pivot = new Vector2(0.5f, 0);
-        rt.sizeDelta = new Vector2(0, 28);
+        rt.sizeDelta = new Vector2(0, 26);
 
         var hlg = actionBar.AddComponent<HorizontalLayoutGroup>();
         hlg.spacing = 3;
@@ -216,84 +394,30 @@ public class RuntimeElementHandle : MonoBehaviour
         ActionBtn("选择文件", RuntimeUIHelper.AccentBlue, OnPickFile);
         ActionBtn("设置交互", new Color(0.55f, 0.4f, 0.7f), OnOpenSettings);
         ActionBtn("复制", new Color(0.4f, 0.5f, 0.6f), OnDuplicate);
-        ActionBtn("▲ 顶层", new Color(0.3f, 0.5f, 0.3f), OnMoveToTop);
-        ActionBtn("▼ 底层", new Color(0.4f, 0.35f, 0.2f), OnMoveToBottom);
+        ActionBtn("▲", new Color(0.3f, 0.5f, 0.3f), OnMoveToTop, 28);
+        ActionBtn("▼", new Color(0.4f, 0.35f, 0.2f), OnMoveToBottom, 28);
         ActionBtn("删除", RuntimeUIHelper.AccentRed, OnDelete);
     }
 
-    private void CreateHandleBar()
+    private void CreateSizeLabel()
     {
-        handleBar = new GameObject("HandleBar");
-        handleBar.transform.SetParent(root.transform, false);
-        var rt = handleBar.AddComponent<RectTransform>();
-        rt.pivot = new Vector2(0.5f, 1);
-        rt.sizeDelta = new Vector2(0, 28);
-
-        var hlg = handleBar.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 3;
-        hlg.padding = new RectOffset(3, 3, 2, 2);
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = true;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-        handleBar.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        handleBar.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.92f);
-
-        DragHandle("移动", new Color(0.3f, 0.6f, 0.3f), DragMode.Move, 60);
-        DragHandle("横向缩放", new Color(0.6f, 0.45f, 0.2f), DragMode.ScaleH, 70);
-        DragHandle("纵向缩放", new Color(0.2f, 0.45f, 0.6f), DragMode.ScaleV, 70);
-        DragHandle("等比缩放", new Color(0.5f, 0.35f, 0.55f), DragMode.ScaleUniform, 70);
-
-        var labelGO = new GameObject("SizeLabel");
-        labelGO.transform.SetParent(handleBar.transform, false);
-        labelGO.AddComponent<RectTransform>();
-        sizeLabel = labelGO.AddComponent<Text>();
+        sizeLabelGO = new GameObject("SizeLabel");
+        sizeLabelGO.transform.SetParent(root.transform, false);
+        var rt = sizeLabelGO.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.sizeDelta = new Vector2(100, 16);
+        sizeLabelRT = rt;
+        sizeLabel = sizeLabelGO.AddComponent<Text>();
         sizeLabel.font = RuntimeUIHelper.GetFont();
         sizeLabel.fontSize = 11;
-        sizeLabel.color = new Color(0.7f, 0.7f, 0.7f);
+        sizeLabel.color = new Color(0.2f, 0.2f, 0.2f);
         sizeLabel.alignment = TextAnchor.MiddleCenter;
         sizeLabel.raycastTarget = false;
-        labelGO.AddComponent<LayoutElement>().preferredWidth = 60;
     }
 
-    private void DragHandle(string label, Color color, DragMode mode, float width)
-    {
-        var go = new GameObject("DH_" + label);
-        go.transform.SetParent(handleBar.transform, false);
-        go.AddComponent<RectTransform>();
-        var img = go.AddComponent<Image>();
-        img.color = color;
-        img.raycastTarget = true;
-        go.AddComponent<LayoutElement>().preferredWidth = width;
-
-        var trigger = go.AddComponent<EventTrigger>();
-
-        var pDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
-        pDown.callback.AddListener(e => StartDrag(mode));
-        trigger.triggers.Add(pDown);
-
-        var drag = new EventTrigger.Entry { eventID = EventTriggerType.Drag };
-        drag.callback.AddListener(e => { });
-        trigger.triggers.Add(drag);
-
-        var pUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-        pUp.callback.AddListener(e => { dragMode = DragMode.None; });
-        trigger.triggers.Add(pUp);
-
-        var textGO = new GameObject("Text");
-        textGO.transform.SetParent(go.transform, false);
-        var trt = textGO.AddComponent<RectTransform>();
-        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
-        trt.offsetMin = Vector2.zero; trt.offsetMax = Vector2.zero;
-        var t = textGO.AddComponent<Text>();
-        t.text = label;
-        t.font = RuntimeUIHelper.GetFont();
-        t.fontSize = 11;
-        t.color = Color.white;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.raycastTarget = false;
-    }
-
-    private void ActionBtn(string label, Color color, System.Action onClick)
+    private void ActionBtn(string label, Color color, System.Action onClick, float width = 60)
     {
         var go = new GameObject("AB_" + label);
         go.transform.SetParent(actionBar.transform, false);
@@ -315,7 +439,7 @@ public class RuntimeElementHandle : MonoBehaviour
             colorMultiplier = 1f,
             fadeDuration = 0.08f
         };
-        go.AddComponent<LayoutElement>().preferredWidth = 65;
+        go.AddComponent<LayoutElement>().preferredWidth = width;
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(go.transform, false);
@@ -344,13 +468,7 @@ public class RuntimeElementHandle : MonoBehaviour
         var editor = RuntimeEditor.Instance;
         if (editor == null) return;
 
-        if (data != null && target != null)
-        {
-            data.x = target.transform.position.x;
-            data.y = target.transform.position.y;
-            data.scaleX = target.transform.localScale.x;
-            data.scaleY = target.transform.localScale.y;
-        }
+        SyncTransformToData();
 
         var panel = editor.GetComponent<RuntimeSettingsPanel>();
         if (panel != null && data != null)

@@ -138,13 +138,29 @@ public class GalleryVideo : MonoBehaviour
 
     private void Update()
     {
-        if (playerTransform == null) return;
+        if (playerTransform == null)
+        {
+            if (GalleryPlayer.Instance != null)
+                playerTransform = GalleryPlayer.Instance.transform;
+            else
+                return;
+        }
 
-        float dist = Vector2.Distance(transform.position, playerTransform.position);
-        playerInPlayRange = dist <= triggerRange;
+        Vector2 diff = (Vector2)transform.position - (Vector2)playerTransform.position;
+        float sqrDist = diff.sqrMagnitude;
+        playerInPlayRange = sqrDist <= triggerRange * triggerRange;
 
-        UpdateFadeIn(dist);
-        UpdateAudioVolume(dist);
+        float dist = -1f;
+        if (fadeInOnApproach && !hasAppeared && sqrDist <= fadeDistance * fadeDistance)
+        {
+            dist = Mathf.Sqrt(sqrDist);
+            UpdateFadeIn(dist);
+        }
+        if (enableAudio && audioSource != null)
+        {
+            if (dist < 0f) dist = Mathf.Sqrt(sqrDist);
+            UpdateAudioVolume(dist);
+        }
 
         if (!hasAppeared) return;
 
@@ -175,14 +191,14 @@ public class GalleryVideo : MonoBehaviour
         if (isPlaying && videoPlayer.isPlaying)
             UpdateVideoFrame();
 
-        UpdateEffects(dist);
+        UpdateEffects(sqrDist);
     }
 
-    private void UpdateEffects(float dist)
+    private void UpdateEffects(float sqrDist)
     {
         if (enableApproachEffects && !approachEffectTriggered)
         {
-            if (dist <= approachEffectDistance)
+            if (sqrDist <= approachEffectDistance * approachEffectDistance)
             {
                 ExecuteEffects(approachEffects);
                 if (approachEffectOnlyOnce) approachEffectTriggered = true;
@@ -190,12 +206,12 @@ public class GalleryVideo : MonoBehaviour
         }
         if (enableApproachEffects && !approachEffectOnlyOnce && approachEffectTriggered)
         {
-            if (dist > approachEffectDistance) approachEffectTriggered = false;
+            if (sqrDist > approachEffectDistance * approachEffectDistance) approachEffectTriggered = false;
         }
 
         if (!enableKeyEffects) return;
 
-        bool inRange = dist <= effectKeyDistance;
+        bool inRange = sqrDist <= effectKeyDistance * effectKeyDistance;
         if (inRange && !effectKeyReady)
         {
             effectKeyReady = true;
@@ -214,7 +230,7 @@ public class GalleryVideo : MonoBehaviour
     private void ExecuteEffects(FrameEffectSet fx)
     {
         if (fx.zoom) ZoomImage();
-        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration);
+        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration, fx.textEffect);
         if (fx.playSound && fx.soundClip != null) PlayEffectSound(fx.soundClip, fx.soundVolume);
         if (fx.changeBGM && fx.bgmClip != null) ChangeBGM(fx.bgmClip, fx.bgmVolume);
         if (fx.changeWeather) ChangeWeather(fx.weatherType, fx.weatherParticles, fx.weatherColor);
@@ -259,14 +275,13 @@ public class GalleryVideo : MonoBehaviour
         overlay.AddComponent<ZoomOverlayClose>();
     }
 
-    private void ShowTextPopup(string text, float duration)
+    private void ShowTextPopup(string text, float duration, int textEffect = 0)
     {
         var cam = Camera.main;
         var go = new GameObject("TextPopup");
         go.transform.position = cam.transform.position + Vector3.forward * 4.8f + Vector3.down * (cam.orthographicSize * 0.6f);
 
         var tm = go.AddComponent<TextMesh>();
-        tm.text = text;
         tm.characterSize = 0.08f;
         tm.fontSize = 80;
         tm.anchor = TextAnchor.MiddleCenter;
@@ -274,9 +289,8 @@ public class GalleryVideo : MonoBehaviour
         tm.color = Color.white;
         go.GetComponent<MeshRenderer>().sortingOrder = 910;
 
-        var tw = go.AddComponent<GalleryTypewriter>();
-        tw.Play(text);
-        Destroy(go, duration);
+        var fx = go.AddComponent<GalleryTextEffect>();
+        fx.Play(text, (GalleryTextEffect.TextEffectType)textEffect, duration);
     }
 
     private void PlayEffectSound(AudioClip clip, float volume)
@@ -314,7 +328,14 @@ public class GalleryVideo : MonoBehaviour
     private void ChangeWeather(GalleryWeather.WeatherType type, int particles, Color color)
     {
         var weather = FindObjectOfType<GalleryWeather>();
-        if (weather == null) return;
+        if (weather == null)
+        {
+            var go = new GameObject("SceneWeather");
+            var col2d = go.AddComponent<BoxCollider2D>();
+            col2d.isTrigger = true;
+            col2d.size = new Vector2(200f, 100f);
+            weather = go.AddComponent<GalleryWeather>();
+        }
         weather.SetWeather(type, particles, color);
     }
 
@@ -398,11 +419,37 @@ public class GalleryVideo : MonoBehaviour
         renderTexture = new RenderTexture(width, height, 0);
         vp.targetTexture = renderTexture;
 
+        Vector3 oldScale = transform.localScale;
+        float oldBoundsW = sr.sprite != null ? sr.sprite.bounds.size.x : 1f;
+        float oldBoundsH = sr.sprite != null ? sr.sprite.bounds.size.y : 1f;
+        float oldVisualW = Mathf.Abs(oldScale.x) * oldBoundsW;
+        float oldVisualH = Mathf.Abs(oldScale.y) * oldBoundsH;
+
         videoSprite = Sprite.Create(
             Texture2D.whiteTexture,
             new Rect(0, 0, 4, 4),
             Vector2.one * 0.5f, 100f);
         sr.sprite = videoSprite;
+
+        float newBoundsW = videoSprite.bounds.size.x;
+        float newBoundsH = videoSprite.bounds.size.y;
+
+        if (fitAspectOnPrepare)
+        {
+            float oldVisualArea = oldVisualW * oldVisualH;
+            float videoAspect = (float)width / height;
+            float targetW = Mathf.Sqrt(oldVisualArea * videoAspect);
+            float targetH = targetW / videoAspect;
+            transform.localScale = new Vector3(
+                targetW / newBoundsW,
+                targetH / newBoundsH, 1f);
+        }
+        else
+        {
+            transform.localScale = new Vector3(
+                oldVisualW / newBoundsW,
+                oldVisualH / newBoundsH, 1f);
+        }
 
         mpb = new MaterialPropertyBlock();
         vp.Play();
@@ -489,6 +536,9 @@ public class GalleryVideo : MonoBehaviour
     public void SetAudio(bool enable, float volume, float range) { enableAudio = enable; maxVolume = volume; audioRange = range; }
     public void SetFadeIn(bool enable, float distance, float speed) { fadeInOnApproach = enable; fadeDistance = distance; fadeSpeed = speed; }
     public void SetTriggerRange(float range) { triggerRange = range; }
+
+    private bool fitAspectOnPrepare = false;
+    public void SetFitAspectOnPrepare(bool fit) { fitAspectOnPrepare = fit; }
 
     public void SetKeyEffects(bool enable, KeyCode key, float distance, FrameEffectSet effects)
     {

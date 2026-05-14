@@ -73,38 +73,49 @@ public class RuntimeEditor : MonoBehaviour
             DeleteSelected();
     }
 
-    private int unfreezeFrames;
-
     public void ToggleEditor()
     {
         IsEditing = !IsEditing;
         SetEditorActive(IsEditing);
         if (IsEditing)
         {
-            unfreezeFrames = 0;
+            unfreezeGuardFrames = 0;
             GalleryPlayer.Freeze();
             LoadCurrentSceneData();
             CreateIdLabels();
         }
         else
         {
-            SaveScene();
-            Deselect();
-            DestroyIdLabels();
-            if (settingsPanel != null) settingsPanel.Close();
-            if (sceneSettingsPanel != null) sceneSettingsPanel.Close();
-            if (blockSettingsPanel != null) blockSettingsPanel.Close();
-            GalleryPlayer.ForceUnfreeze();
-            unfreezeFrames = 3;
+            try
+            {
+                SaveScene();
+                Deselect();
+                DestroyIdLabels();
+                if (settingsPanel != null) settingsPanel.Close();
+                if (sceneSettingsPanel != null) sceneSettingsPanel.Close();
+                if (blockSettingsPanel != null) blockSettingsPanel.Close();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[RuntimeEditor] Error closing editor: " + e);
+            }
+            finally
+            {
+                GalleryPlayer.ForceUnfreeze();
+                unfreezeGuardFrames = 5;
+                Debug.Log("[RuntimeEditor] Editor closed, freezeCount forced to 0");
+            }
         }
     }
 
+    private int unfreezeGuardFrames;
+
     private void LateUpdate()
     {
-        if (unfreezeFrames > 0 && !IsEditing)
+        if (unfreezeGuardFrames > 0)
         {
             GalleryPlayer.ForceUnfreeze();
-            unfreezeFrames--;
+            unfreezeGuardFrames--;
         }
     }
 
@@ -344,7 +355,7 @@ public class RuntimeEditor : MonoBehaviour
         Vector2 wp = cam.ScreenToWorldPoint(Input.mousePosition);
 
         GameObject closest = null;
-        float closestDist = float.MaxValue;
+        float closestSqrDist = float.MaxValue;
 
         foreach (var kv in goToData)
         {
@@ -352,19 +363,26 @@ public class RuntimeEditor : MonoBehaviour
             Bounds bounds = GetElementBounds(kv.Key);
             if (bounds.Contains(new Vector3(wp.x, wp.y, bounds.center.z)))
             {
-                float dist = Vector2.Distance(wp, bounds.center);
-                if (dist < closestDist)
+                float sqrDist = ((Vector2)bounds.center - wp).sqrMagnitude;
+                if (sqrDist < closestSqrDist)
                 {
-                    closestDist = dist;
+                    closestSqrDist = sqrDist;
                     closest = kv.Key;
                 }
             }
         }
 
         if (closest != null)
-            Select(closest);
+        {
+            if (closest != selectedObject)
+                Select(closest);
+            if (elementHandle != null)
+                elementHandle.StartMoveFromWorld(new Vector3(wp.x, wp.y, 0));
+        }
         else
+        {
             Deselect();
+        }
     }
 
     private Bounds GetElementBounds(GameObject go)

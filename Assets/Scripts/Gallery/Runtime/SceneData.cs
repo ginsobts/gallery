@@ -236,6 +236,7 @@ public class DialogueLineData
 {
     public string text = "";
     public float duration = 2f;
+    public int textEffect = 0;
 }
 
 [Serializable]
@@ -265,6 +266,7 @@ public class EffectData
     public bool showText = false;
     public string text = "";
     public float textDuration = 4f;
+    public int textEffect = 0;
     public bool playSound = false;
     public string soundFile = "";
     public float soundVolume = 0.8f;

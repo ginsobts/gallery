@@ -38,6 +38,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
         SceneData data = SceneData.Load(jsonPath);
         if (data == null) { Debug.LogWarning($"Scene not found: {jsonPath}"); return; }
 
+        if (data.settings == null) data.settings = new SceneSettingsData();
         ApplySettings(data.settings);
         loadRoutine = StartCoroutine(LoadElementsAsync(data));
     }
@@ -117,6 +118,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
 
     private void ApplySettings(SceneSettingsData s)
     {
+        if (s == null) return;
         RenderSettings.ambientLight = SceneDataHelper.ToColor(s.ambientColor) * s.ambientBrightness;
 
         var bg = FindObjectOfType<GalleryBackground>();
@@ -133,6 +135,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
 
     public void ApplyBlockSettingsManager(SceneSettingsData s)
     {
+        if (s == null) return;
         var cam = Camera.main;
         if (cam == null) return;
 
@@ -150,7 +153,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
     public void ApplyBackgroundImage(SceneSettingsData s)
     {
         if (backgroundGO != null) Destroy(backgroundGO);
-        if (string.IsNullOrEmpty(s.backgroundMediaFile)) return;
+        if (s == null || string.IsNullOrEmpty(s.backgroundMediaFile)) return;
 
         Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, s.backgroundMediaFile);
         if (sprite == null) return;
@@ -166,6 +169,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
 
     public void ApplyCameraSettings(SceneSettingsData s)
     {
+        if (s == null) return;
         var cam = Camera.main;
         if (cam == null) return;
 
@@ -198,7 +202,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
     public void ApplyTimeline(SceneSettingsData s)
     {
         if (timelineGO != null) Destroy(timelineGO);
-        if (s.timelinePoints == null || s.timelinePoints.Length == 0) return;
+        if (s == null || s.timelinePoints == null || s.timelinePoints.Length == 0) return;
 
         timelineGO = new GameObject("RuntimeTimeline");
         var sprite = RuntimeSprite.GetCircle(16);
@@ -291,9 +295,15 @@ public class RuntimeSceneBuilder : MonoBehaviour
         {
             sr.sprite = RuntimeSprite.Get();
             sr.color = new Color(0.3f, 0.5f, 0.8f, 0.8f);
-            go.transform.localScale = new Vector3(
-                Mathf.Max(elem.scaleX, 2f),
-                Mathf.Max(elem.scaleY, 2f), 1f);
+            float placeholderW = Mathf.Max(elem.scaleX, 2f);
+            float placeholderH = Mathf.Max(elem.scaleY, 2f);
+            elem.scaleX = placeholderW;
+            elem.scaleY = placeholderH;
+            go.transform.localScale = new Vector3(placeholderW, placeholderH, 1f);
+        }
+        else
+        {
+            FitScaleToSprite(go, sprite, elem);
         }
         frame.SwapImage(sprite, elem.caption);
 
@@ -365,9 +375,13 @@ public class RuntimeSceneBuilder : MonoBehaviour
             if (!string.IsNullOrEmpty(elem.video.coverMediaFile))
             {
                 Sprite cover = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.video.coverMediaFile);
+                if (cover != null)
+                    FitScaleToSprite(go, cover, elem);
                 video.SetCoverImage(cover);
             }
         }
+
+        video.SetFitAspectOnPrepare(true);
 
         if (elem.enableKeyInteract)
             video.SetKeyEffects(true, ParseKeyCode(elem.interactKey), elem.interactDistance, BuildEffectSet(elem.keyEffects));
@@ -400,7 +414,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
             {
                 dl = new GalleryNPCDialogue.DialogueLine[nd.lines.Length];
                 for (int i = 0; i < nd.lines.Length; i++)
-                    dl[i] = new GalleryNPCDialogue.DialogueLine { text = nd.lines[i].text, duration = nd.lines[i].duration };
+                    dl[i] = new GalleryNPCDialogue.DialogueLine { text = nd.lines[i].text, duration = nd.lines[i].duration, textEffect = nd.lines[i].textEffect };
             }
             npc.SetDialogueLines(dl);
             npc.SetDialogue(nd.autoTrigger, nd.triggerDistance, ParseKeyCode(nd.dialogueKey), nd.loop);
@@ -465,6 +479,30 @@ public class RuntimeSceneBuilder : MonoBehaviour
         return go;
     }
 
+    /// <summary>
+    /// Adjusts the element's scale so the sprite displays without distortion
+    /// while keeping the visual area approximately equal to the original frame.
+    /// The original frame visual area = scaleX * scaleY (assuming unit-size placeholder).
+    /// </summary>
+    private void FitScaleToSprite(GameObject go, Sprite sprite, ElementData elem)
+    {
+        float spriteW = sprite.bounds.size.x;
+        float spriteH = sprite.bounds.size.y;
+        if (spriteW <= 0 || spriteH <= 0) return;
+
+        float frameW = Mathf.Abs(elem.scaleX);
+        float frameH = Mathf.Abs(elem.scaleY);
+        if (frameW <= 0) frameW = 1f;
+        if (frameH <= 0) frameH = 1f;
+
+        float oldVisualArea = frameW * frameH;
+        float uniformScale = Mathf.Sqrt(oldVisualArea / (spriteW * spriteH));
+
+        elem.scaleX = uniformScale;
+        elem.scaleY = uniformScale;
+        go.transform.localScale = new Vector3(uniformScale, uniformScale, 1f);
+    }
+
     private void ApplyInteraction(GalleryFrame frame, ElementData elem)
     {
         if (elem.enableKeyInteract)
@@ -481,6 +519,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
         fx.showText = data.showText;
         fx.text = data.text;
         fx.textDuration = data.textDuration;
+        fx.textEffect = data.textEffect;
         fx.playSound = data.playSound;
         fx.soundVolume = data.soundVolume;
         fx.changeBGM = data.changeBGM;
