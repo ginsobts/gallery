@@ -363,6 +363,7 @@ public class RuntimeEditor : MonoBehaviour
 
         CreateToolbar();
         CreateStatusBar();
+        CreateTutorialButton();
     }
 
     private void CreateToolbar()
@@ -430,6 +431,157 @@ public class RuntimeEditor : MonoBehaviour
     public void SetStatus(string msg)
     {
         if (statusText != null) statusText.text = msg;
+    }
+
+    // ── Tutorial ──
+
+    private Canvas tutorialCanvas;
+    private GameObject tutorialPanel;
+
+    private void CreateTutorialButton()
+    {
+        tutorialCanvas = RuntimeUIHelper.CreateCanvas("TutorialCanvas", transform, 31000);
+
+        var btnGO = new GameObject("TutorialBtn");
+        btnGO.transform.SetParent(tutorialCanvas.transform, false);
+        var brt = btnGO.AddComponent<RectTransform>();
+        brt.anchorMin = new Vector2(0, 0);
+        brt.anchorMax = new Vector2(0, 0);
+        brt.pivot = new Vector2(0, 0);
+        brt.anchoredPosition = new Vector2(12, 12);
+        brt.sizeDelta = new Vector2(80, 32);
+        var btnImg = btnGO.AddComponent<Image>();
+        btnImg.color = new Color(0.25f, 0.4f, 0.6f, 0.9f);
+        var btn = btnGO.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
+        btn.navigation = new Navigation { mode = Navigation.Mode.None };
+        btn.onClick.AddListener(ShowTutorial);
+
+        var txtGO = new GameObject("Text");
+        txtGO.transform.SetParent(btnGO.transform, false);
+        var trt = txtGO.AddComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+        trt.offsetMin = Vector2.zero; trt.offsetMax = Vector2.zero;
+        var t = txtGO.AddComponent<Text>();
+        t.text = "教学";
+        t.font = RuntimeUIHelper.GetFont();
+        t.fontSize = 15;
+        t.color = Color.white;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.raycastTarget = false;
+    }
+
+    private void ShowTutorial()
+    {
+        if (tutorialPanel != null) { Destroy(tutorialPanel); return; }
+
+        tutorialPanel = new GameObject("TutorialPanel");
+        tutorialPanel.transform.SetParent(tutorialCanvas.transform, false);
+        var rt = tutorialPanel.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+
+        var bgBtn = tutorialPanel.AddComponent<Button>();
+        var bgImg = tutorialPanel.AddComponent<Image>();
+        bgImg.color = new Color(0, 0, 0, 0.6f);
+        bgBtn.targetGraphic = bgImg;
+        bgBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+        bgBtn.onClick.AddListener(CloseTutorial);
+
+        var box = new GameObject("Box");
+        box.transform.SetParent(tutorialPanel.transform, false);
+        var boxRT = box.AddComponent<RectTransform>();
+        boxRT.anchorMin = new Vector2(0.08f, 0.08f);
+        boxRT.anchorMax = new Vector2(0.92f, 0.92f);
+        boxRT.offsetMin = Vector2.zero; boxRT.offsetMax = Vector2.zero;
+        var boxImg = box.AddComponent<Image>();
+        boxImg.color = new Color(0.1f, 0.1f, 0.14f, 1f);
+        boxImg.raycastTarget = true;
+
+        Transform contentParent;
+        RuntimeUIHelper.ScrollPanel(box.transform, out contentParent);
+
+        string[] lines = GetTutorialLines();
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("##"))
+            {
+                var lbl = RuntimeUIHelper.Label(contentParent, line.Substring(2).Trim(), 15, TextAnchor.MiddleLeft);
+                lbl.fontStyle = FontStyle.Bold;
+                lbl.color = new Color(0.4f, 0.8f, 1f);
+            }
+            else if (string.IsNullOrEmpty(line))
+            {
+                RuntimeUIHelper.Spacer(contentParent, 8);
+            }
+            else
+            {
+                RuntimeUIHelper.Label(contentParent, line, 13);
+            }
+        }
+        RuntimeUIHelper.Spacer(contentParent, 20);
+    }
+
+    private void CloseTutorial()
+    {
+        if (tutorialPanel != null) { Destroy(tutorialPanel); tutorialPanel = null; }
+    }
+
+    private string[] GetTutorialLines()
+    {
+        return new[]
+        {
+            "## 基本操作",
+            "按 Tab 键打开/关闭编辑器",
+            "编辑器打开时玩家不会移动",
+            "",
+            "## 鼠标模式",
+            "点击左侧「鼠标 (选择/拖拽)」按钮开启",
+            "开启后点击场景中的元素即可选中",
+            "选中后元素上方出现操作栏，下方出现拖拽栏",
+            "",
+            "## 操作栏按钮",
+            "选择文件 — 为元素选择图片/视频文件",
+            "设置交互 — 打开右侧属性面板",
+            "▲ 顶层 — 将元素移到所有元素上方",
+            "▼ 底层 — 将元素移到所有元素下方",
+            "删除 — 删除该元素",
+            "",
+            "## 拖拽栏",
+            "移动 — 按住拖动可移动元素位置",
+            "横向缩放 — 左右拖动改变宽度",
+            "纵向缩放 — 上下拖动改变高度",
+            "等比缩放 — 拖动等比例缩放",
+            "",
+            "## 属性面板 (设置交互)",
+            "ID — 可自定义元素ID（用于交互引用）",
+            "变换 — 精确设置位置、缩放、排序层",
+            "有碰撞体 — 控制该元素是否阻挡玩家",
+            "启用按键交互 — 玩家靠近按键触发效果",
+            "启用靠近触发 — 玩家走近自动触发效果",
+            "",
+            "## 交互效果类型",
+            "缩放查看 / 显示文字 / 播放音效",
+            "切换BGM / 改变天气 / 改变背景",
+            "改变亮度 / 加载场景 / 开关物体",
+            "",
+            "## 工具栏其他功能",
+            "+ 照片/视频/NPC — 添加新元素到场景中心",
+            "设置背景图片 — 选择一张背景图",
+            "保存 — 保存当前编辑（退出时也会自动保存）",
+            "场景列表 — 切换/创建/删除场景",
+            "",
+            "## 快捷键",
+            "Tab — 开启/关闭编辑器",
+            "Delete — 删除选中元素",
+            "",
+            "## 其他说明",
+            "每个元素下方的黄色文字是其ID",
+            "可在「开关物体」交互中填入目标ID来控制其他元素",
+            "所有数据保存在本地，关闭游戏后再打开仍保留",
+            "",
+            "点击灰色区域关闭本教学",
+        };
     }
 
     // ── ID Labels ──
