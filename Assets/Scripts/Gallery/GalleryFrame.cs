@@ -173,7 +173,7 @@ public class GalleryFrame : MonoBehaviour
             if (playerDistSqr <= approachDistSqr)
             {
                 ExecuteEffects(approachEffects);
-                if (approachOnlyOnce) approachTriggered = true;
+                approachTriggered = true;
             }
         }
         if (enableApproachTrigger && !approachOnlyOnce && approachTriggered)

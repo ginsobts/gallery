@@ -142,7 +142,7 @@ public class GalleryNPCDialogue : MonoBehaviour
             if (sqrDist <= approachEffectDistance * approachEffectDistance)
             {
                 ExecuteEffects(approachEffects);
-                if (approachEffectOnlyOnce) approachEffectTriggered = true;
+                approachEffectTriggered = true;
             }
         }
         if (enableApproachEffects && !approachEffectOnlyOnce && approachEffectTriggered)

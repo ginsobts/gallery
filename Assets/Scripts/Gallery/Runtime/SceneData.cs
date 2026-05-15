@@ -37,6 +37,7 @@ public class SceneSettingsData
     public float[] backgroundColor = { 0.05f, 0.05f, 0.1f, 1f };
     public float playerStartX = 0f;
     public float playerStartY = 0f;
+    public string playerMediaFile = "";
     public float groundWidth = 40f;
     public float groundHeight = 12f;
     public string groundMediaFile = "";

@@ -62,6 +62,13 @@ public class RuntimeEditor : MonoBehaviour
             ToggleEditor();
 
         if (!IsEditing) return;
+
+        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.A) ||
+            Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.D))
+        {
+            ToggleEditor();
+            return;
+        }
         if (settingsPanel != null && settingsPanel.IsOpen) return;
         if (sceneSettingsPanel != null && (sceneSettingsPanel.IsOpen || sceneSettingsPanel.IsInPickMode)) return;
         if (blockSettingsPanel != null && blockSettingsPanel.IsOpen) return;

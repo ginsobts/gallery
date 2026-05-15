@@ -14,9 +14,8 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
 
     private static readonly string[] TransitionNames = { "Cut", "Fade", "Lerp" };
 
-    private enum PickMode { None, CameraOrigin, TimelineNode, TimelineNew, BoundaryPlace, BoundaryEdit }
+    private enum PickMode { None, CameraOrigin, BoundaryPlace, BoundaryEdit, TimelinePlace, TimelineEdit }
     private PickMode pickMode = PickMode.None;
-    private int pickTargetIndex;
     private bool showAdvancedCamera = false;
 
     private GameObject boundaryPreviewLine;
@@ -24,6 +23,11 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
 
     private List<BoundaryHandle> editHandles = new List<BoundaryHandle>();
     private int draggingIndex = -1;
+
+    private GameObject timelinePreviewDot;
+    private List<GameObject> timelineGizmos = new List<GameObject>();
+    private List<BoundaryHandle> timelineEditHandles = new List<BoundaryHandle>();
+    private int timelineDraggingIndex = -1;
 
     public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
     public bool IsInPickMode => pickMode != PickMode.None;
@@ -36,6 +40,9 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         pickMode = PickMode.None;
         DestroyBoundaryPreview();
         ClearEditHandles();
+        DestroyTimelinePreview();
+        HideTimelineGizmos();
+        ClearTimelineEditHandles();
         BuildContent();
     }
 
@@ -46,6 +53,9 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         DestroyBoundaryPreview();
         HideBoundaryGizmos();
         ClearEditHandles();
+        DestroyTimelinePreview();
+        HideTimelineGizmos();
+        ClearTimelineEditHandles();
         ApplyAndSave();
     }
 
@@ -55,79 +65,56 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab))
         {
-            if (pickMode == PickMode.BoundaryPlace)
-                FinishBoundaryPlacement();
-            else if (pickMode == PickMode.BoundaryEdit)
-                FinishBoundaryEdit();
-            else
-                CancelPick();
-            return;
-        }
-
-        if (pickMode == PickMode.BoundaryEdit)
-        {
-            if (Input.GetMouseButtonDown(1))
+            switch (pickMode)
             {
-                FinishBoundaryEdit();
-                return;
+                case PickMode.BoundaryPlace: FinishBoundaryPlacement(); return;
+                case PickMode.BoundaryEdit: FinishBoundaryEdit(); return;
+                case PickMode.TimelinePlace: FinishTimelinePlacement(); return;
+                case PickMode.TimelineEdit: FinishTimelineEdit(); return;
+                default: CancelPick(); return;
             }
-            UpdateBoundaryEditDrag();
-            return;
         }
 
-        if (pickMode == PickMode.BoundaryPlace)
-        {
-            UpdateBoundaryPreview();
-            if (Input.GetMouseButtonDown(0))
-            {
-                PlaceBoundary();
-            }
-            if (Input.GetMouseButtonDown(1))
-            {
-                FinishBoundaryPlacement();
-            }
-            return;
-        }
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            var cam = Camera.main;
-            if (cam == null) { CancelPick(); return; }
-            Vector2 wp = cam.ScreenToWorldPoint(Input.mousePosition);
-            OnPickPosition(wp);
-        }
-    }
-
-    private void OnPickPosition(Vector2 worldPos)
-    {
         switch (pickMode)
         {
+            case PickMode.BoundaryEdit:
+                if (Input.GetMouseButtonDown(1)) { FinishBoundaryEdit(); return; }
+                UpdateBoundaryEditDrag();
+                return;
+
+            case PickMode.BoundaryPlace:
+                UpdateBoundaryPreview();
+                if (Input.GetMouseButtonDown(0)) PlaceBoundary();
+                if (Input.GetMouseButtonDown(1)) FinishBoundaryPlacement();
+                return;
+
+            case PickMode.TimelinePlace:
+                UpdateTimelinePreview();
+                if (Input.GetMouseButtonDown(0)) PlaceTimelineNode();
+                if (Input.GetMouseButtonDown(1)) FinishTimelinePlacement();
+                return;
+
+            case PickMode.TimelineEdit:
+                if (Input.GetMouseButtonDown(1)) { FinishTimelineEdit(); return; }
+                UpdateTimelineEditDrag();
+                return;
+
             case PickMode.CameraOrigin:
-                data.cameraFirstBlockX = worldPos.x;
-                data.cameraY = worldPos.y;
-                break;
-
-            case PickMode.TimelineNode:
-                if (data.timelinePoints != null && pickTargetIndex < data.timelinePoints.Length)
+                if (Input.GetMouseButtonDown(0))
                 {
-                    data.timelinePoints[pickTargetIndex].x = worldPos.x;
-                    data.timelinePoints[pickTargetIndex].y = worldPos.y;
+                    var cam = Camera.main;
+                    if (cam == null) { CancelPick(); return; }
+                    Vector2 wp = cam.ScreenToWorldPoint(Input.mousePosition);
+                    data.cameraFirstBlockX = wp.x;
+                    data.cameraY = wp.y;
+                    pickMode = PickMode.None;
+                    panelRoot.SetActive(true);
+                    BuildContent();
+                    var editor = RuntimeEditor.Instance;
+                    if (editor != null) editor.SetStatus("位置已设定");
                 }
-                break;
-
-            case PickMode.TimelineNew:
-                var pts = data.timelinePoints != null ? new List<TimelinePointData>(data.timelinePoints) : new List<TimelinePointData>();
-                pts.Add(new TimelinePointData { x = worldPos.x, y = worldPos.y, dateText = "" });
-                data.timelinePoints = pts.ToArray();
-                break;
+                return;
         }
-
-        pickMode = PickMode.None;
-        panelRoot.SetActive(true);
-        BuildContent();
-
-        var editor = RuntimeEditor.Instance;
-        if (editor != null) editor.SetStatus("位置已设定");
     }
 
     private void CancelPick()
@@ -135,23 +122,20 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         pickMode = PickMode.None;
         DestroyBoundaryPreview();
         HideBoundaryGizmos();
+        DestroyTimelinePreview();
+        HideTimelineGizmos();
+        ClearTimelineEditHandles();
         panelRoot.SetActive(true);
         BuildContent();
     }
 
-    private void EnterPickMode(PickMode mode, int targetIndex = 0)
+    private void EnterPickMode(PickMode mode)
     {
         pickMode = mode;
-        pickTargetIndex = targetIndex;
         panelRoot.SetActive(false);
         var editor = RuntimeEditor.Instance;
         if (editor != null)
-        {
-            if (mode == PickMode.BoundaryPlace)
-                editor.SetStatus("左键放置分界线 | 右键或Esc结束");
-            else
-                editor.SetStatus("点击场景中任意位置选取坐标 (Esc取消)");
-        }
+            editor.SetStatus("点击场景中任意位置选取坐标 (Esc取消)");
     }
 
     // ── Boundary Placement ──
@@ -496,6 +480,8 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         RuntimeUIHelper.Label(content, "场景布局", 16, TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
         RuntimeUIHelper.Spacer(content, 4);
 
+        BuildPlayerSection();
+        RuntimeUIHelper.Spacer(content, 6);
         BuildCameraSection();
         RuntimeUIHelper.Spacer(content, 6);
         BuildTransitionSection();
@@ -507,6 +493,44 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         RuntimeUIHelper.Spacer(content, 2);
         RuntimeUIHelper.Btn(content, "应用并关闭", () => Close(), RuntimeUIHelper.AccentGreen);
         RuntimeUIHelper.Spacer(content, 4);
+    }
+
+    // ── Player ──
+
+    private void BuildPlayerSection()
+    {
+        RuntimeUIHelper.Section(content, "玩家角色");
+
+        RuntimeUIHelper.Btn(content, "选择角色贴图", () =>
+        {
+            string path = NativeFilePicker.PickImageFile("选择角色贴图");
+            if (string.IsNullOrEmpty(path)) return;
+            var editor = RuntimeEditor.Instance;
+            if (editor == null) return;
+            string rel = RuntimeAssetLoader.Instance.CopyMediaToScene(path, editor.CurrentSceneName);
+            if (!string.IsNullOrEmpty(rel))
+            {
+                data.playerMediaFile = rel;
+                ApplyPlayerSprite(editor.CurrentSceneName, rel);
+                editor.SetStatus("已设置角色贴图: " + rel);
+            }
+        }, RuntimeUIHelper.AccentBlue);
+
+        if (!string.IsNullOrEmpty(data.playerMediaFile))
+            RuntimeUIHelper.Label(content, "当前: " + data.playerMediaFile, 10);
+        else
+            RuntimeUIHelper.Label(content, "当前: 默认", 10);
+    }
+
+    private void ApplyPlayerSprite(string sceneName, string mediaFile)
+    {
+        if (GalleryPlayer.Instance == null) return;
+        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(sceneName, mediaFile);
+        if (sprite != null)
+        {
+            var sr = GalleryPlayer.Instance.GetComponent<SpriteRenderer>();
+            if (sr != null) sr.sprite = sprite;
+        }
     }
 
     // ── Camera ──
@@ -647,7 +671,290 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         }
     }
 
-    // ── Timeline ──
+    // ── Timeline Placement ──
+
+    private void EnterTimelinePlacementMode()
+    {
+        pickMode = PickMode.TimelinePlace;
+        panelRoot.SetActive(false);
+        CreateTimelinePreview();
+        ShowTimelineGizmos();
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.SetStatus("左键放置时间轴节点 | 右键或Esc结束");
+    }
+
+    private void CreateTimelinePreview()
+    {
+        DestroyTimelinePreview();
+        timelinePreviewDot = new GameObject("TimelinePreviewDot");
+        var sr = timelinePreviewDot.AddComponent<SpriteRenderer>();
+        sr.sprite = RuntimeSprite.GetCircle(16);
+        sr.color = new Color(0.9f, 0.7f, 0.2f, 0.7f);
+        sr.sortingOrder = 9999;
+        float dotSize = data.timelineDotSize > 0 ? data.timelineDotSize : 0.2f;
+        timelinePreviewDot.transform.localScale = Vector3.one * dotSize;
+    }
+
+    private void UpdateTimelinePreview()
+    {
+        if (timelinePreviewDot == null) return;
+        var cam = Camera.main;
+        if (cam == null) return;
+        Vector3 worldPos = cam.ScreenToWorldPoint(Input.mousePosition);
+        timelinePreviewDot.transform.position = new Vector3(worldPos.x, worldPos.y, 0f);
+    }
+
+    private void PlaceTimelineNode()
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+        Vector3 worldPos = cam.ScreenToWorldPoint(Input.mousePosition);
+
+        var pts = data.timelinePoints != null
+            ? new List<TimelinePointData>(data.timelinePoints)
+            : new List<TimelinePointData>();
+        pts.Add(new TimelinePointData { x = worldPos.x, y = worldPos.y, dateText = "" });
+        data.timelinePoints = pts.ToArray();
+
+        ShowTimelineGizmos();
+
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.SetStatus("已放置节点 (共" + pts.Count + "个) | 右键结束");
+    }
+
+    private void FinishTimelinePlacement()
+    {
+        pickMode = PickMode.None;
+        DestroyTimelinePreview();
+        HideTimelineGizmos();
+        panelRoot.SetActive(true);
+        BuildContent();
+
+        var editor = RuntimeEditor.Instance;
+        int count = data.timelinePoints != null ? data.timelinePoints.Length : 0;
+        if (editor != null) editor.SetStatus("时间轴节点放置完成，共 " + count + " 个");
+    }
+
+    private void DestroyTimelinePreview()
+    {
+        if (timelinePreviewDot != null)
+        {
+            Destroy(timelinePreviewDot);
+            timelinePreviewDot = null;
+        }
+    }
+
+    private void ShowTimelineGizmos()
+    {
+        HideTimelineGizmos();
+        if (data.timelinePoints == null || data.timelinePoints.Length == 0) return;
+
+        float dotSize = data.timelineDotSize > 0 ? data.timelineDotSize : 0.2f;
+        float lineWidth = data.timelineLineWidth > 0 ? data.timelineLineWidth : 0.05f;
+        Color lineColor = SceneDataHelper.ToColor(data.timelineLineColor);
+        var sharedMat = GetTimelineLineMaterial();
+
+        for (int i = 0; i < data.timelinePoints.Length - 1; i++)
+        {
+            var a = data.timelinePoints[i];
+            var b = data.timelinePoints[i + 1];
+            var lineGO = new GameObject("TLGizmo_Line_" + i);
+            var lr = lineGO.AddComponent<LineRenderer>();
+            lr.positionCount = 2;
+            lr.SetPosition(0, new Vector3(a.x, a.y, 0));
+            lr.SetPosition(1, new Vector3(b.x, b.y, 0));
+            lr.startWidth = lineWidth;
+            lr.endWidth = lineWidth;
+            lr.startColor = lineColor;
+            lr.endColor = lineColor;
+            lr.sortingOrder = 9997;
+            lr.sharedMaterial = sharedMat;
+            lr.useWorldSpace = true;
+            timelineGizmos.Add(lineGO);
+        }
+
+        for (int i = 0; i < data.timelinePoints.Length; i++)
+        {
+            var pt = data.timelinePoints[i];
+            var dotGO = new GameObject("TLGizmo_Dot_" + i);
+            var sr = dotGO.AddComponent<SpriteRenderer>();
+            sr.sprite = RuntimeSprite.GetCircle(16);
+            sr.color = SceneDataHelper.ToColor(pt.color);
+            sr.sortingOrder = 9998;
+            dotGO.transform.position = new Vector3(pt.x, pt.y, 0);
+            dotGO.transform.localScale = Vector3.one * dotSize;
+            timelineGizmos.Add(dotGO);
+
+            if (!string.IsNullOrEmpty(pt.dateText))
+            {
+                var textGO = new GameObject("TLGizmo_Text_" + i);
+                textGO.transform.position = new Vector3(pt.x, pt.y + dotSize * 3f, 0);
+                var tm = textGO.AddComponent<TextMesh>();
+                tm.text = pt.dateText;
+                tm.characterSize = data.timelineTextSize > 0 ? data.timelineTextSize : 0.08f;
+                tm.fontSize = 60;
+                tm.anchor = TextAnchor.LowerCenter;
+                tm.alignment = TextAlignment.Center;
+                tm.color = SceneDataHelper.ToColor(pt.color);
+                textGO.GetComponent<MeshRenderer>().sortingOrder = 9999;
+                timelineGizmos.Add(textGO);
+            }
+        }
+    }
+
+    private void HideTimelineGizmos()
+    {
+        for (int i = 0; i < timelineGizmos.Count; i++)
+        {
+            if (timelineGizmos[i] != null) Destroy(timelineGizmos[i]);
+        }
+        timelineGizmos.Clear();
+    }
+
+    private static Material _tlLineMat;
+    private static Material GetTimelineLineMaterial()
+    {
+        if (_tlLineMat == null)
+        {
+            var shader = Shader.Find("Sprites/Default");
+            if (shader != null) _tlLineMat = new Material(shader);
+        }
+        return _tlLineMat;
+    }
+
+    // ── Timeline Edit Mode ──
+
+    private void EnterTimelineEditMode()
+    {
+        if (data.timelinePoints == null || data.timelinePoints.Length == 0) return;
+        pickMode = PickMode.TimelineEdit;
+        panelRoot.SetActive(false);
+        timelineDraggingIndex = -1;
+        CreateTimelineEditHandles();
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.SetStatus("拖拽 ◆ 移动节点 | 点击 ✕ 删除 | 右键/Esc 返回");
+    }
+
+    private void CreateTimelineEditHandles()
+    {
+        ClearTimelineEditHandles();
+        if (data.timelinePoints == null) return;
+        var cam = Camera.main;
+        float handleSize = cam != null ? cam.orthographicSize * 0.12f : 0.6f;
+        float dotSize = data.timelineDotSize > 0 ? data.timelineDotSize : 0.2f;
+
+        ShowTimelineGizmos();
+
+        for (int i = 0; i < data.timelinePoints.Length; i++)
+        {
+            var pt = data.timelinePoints[i];
+            var handle = new BoundaryHandle { index = i };
+
+            handle.moveHandle = CreateWorldButton(pt.x, pt.y, handleSize,
+                new Color(0.9f, 0.7f, 0.2f, 0.9f), "\u25C6", i);
+
+            handle.deleteHandle = CreateWorldButton(pt.x + handleSize * 1.5f, pt.y + handleSize * 1.5f,
+                handleSize * 0.7f, new Color(0.9f, 0.25f, 0.25f, 0.9f), "\u2715", i);
+
+            timelineEditHandles.Add(handle);
+        }
+    }
+
+    private void UpdateTimelineEditDrag()
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+        Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            var hit = Physics2D.OverlapPoint(mouseWorld);
+            if (hit != null)
+            {
+                for (int i = 0; i < timelineEditHandles.Count; i++)
+                {
+                    if (hit.gameObject == timelineEditHandles[i].deleteHandle)
+                    {
+                        DeleteTimelineNodeAt(i);
+                        return;
+                    }
+                    if (hit.gameObject == timelineEditHandles[i].moveHandle)
+                    {
+                        timelineDraggingIndex = i;
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (Input.GetMouseButton(0) && timelineDraggingIndex >= 0 && timelineDraggingIndex < timelineEditHandles.Count)
+        {
+            int dataIdx = timelineEditHandles[timelineDraggingIndex].index;
+            data.timelinePoints[dataIdx].x = mouseWorld.x;
+            data.timelinePoints[dataIdx].y = mouseWorld.y;
+
+            var h = timelineEditHandles[timelineDraggingIndex];
+            float handleSize = cam.orthographicSize * 0.12f;
+            h.moveHandle.transform.position = new Vector3(mouseWorld.x, mouseWorld.y, 0);
+            h.deleteHandle.transform.position = new Vector3(mouseWorld.x + handleSize * 1.5f, mouseWorld.y + handleSize * 1.5f, 0);
+
+            ShowTimelineGizmos();
+        }
+
+        if (Input.GetMouseButtonUp(0) && timelineDraggingIndex >= 0)
+        {
+            timelineDraggingIndex = -1;
+        }
+    }
+
+    private void DeleteTimelineNodeAt(int handleIndex)
+    {
+        if (data.timelinePoints == null) return;
+        int dataIndex = timelineEditHandles[handleIndex].index;
+        var list = new List<TimelinePointData>(data.timelinePoints);
+        if (dataIndex >= 0 && dataIndex < list.Count)
+            list.RemoveAt(dataIndex);
+        data.timelinePoints = list.Count > 0 ? list.ToArray() : null;
+
+        timelineDraggingIndex = -1;
+        CreateTimelineEditHandles();
+
+        var editor = RuntimeEditor.Instance;
+        if (editor != null)
+        {
+            int remaining = data.timelinePoints != null ? data.timelinePoints.Length : 0;
+            editor.SetStatus("已删除节点 (剩余 " + remaining + " 个)");
+        }
+
+        if (data.timelinePoints == null || data.timelinePoints.Length == 0)
+            FinishTimelineEdit();
+    }
+
+    private void FinishTimelineEdit()
+    {
+        pickMode = PickMode.None;
+        ClearTimelineEditHandles();
+        HideTimelineGizmos();
+        timelineDraggingIndex = -1;
+        panelRoot.SetActive(true);
+        BuildContent();
+
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.SetStatus("时间轴编辑完成");
+    }
+
+    private void ClearTimelineEditHandles()
+    {
+        for (int i = 0; i < timelineEditHandles.Count; i++)
+        {
+            if (timelineEditHandles[i].lineGO != null) Destroy(timelineEditHandles[i].lineGO);
+            if (timelineEditHandles[i].moveHandle != null) Destroy(timelineEditHandles[i].moveHandle);
+            if (timelineEditHandles[i].deleteHandle != null) Destroy(timelineEditHandles[i].deleteHandle);
+        }
+        timelineEditHandles.Clear();
+    }
+
+    // ── Timeline UI ──
 
     private void BuildTimelineSection()
     {
@@ -658,32 +965,37 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
         RuntimeUIHelper.FloatField(content, "文字大小", data.timelineTextSize, v => data.timelineTextSize = Mathf.Max(0.01f, v));
 
         RuntimeUIHelper.Spacer(content, 4);
+        RuntimeUIHelper.Btn(content, "放置时间轴节点", () => EnterTimelinePlacementMode(), RuntimeUIHelper.AccentBlue);
+        RuntimeUIHelper.Spacer(content, 2);
 
-        var pts = data.timelinePoints != null ? new List<TimelinePointData>(data.timelinePoints) : new List<TimelinePointData>();
+        int nodeCount = data.timelinePoints != null ? data.timelinePoints.Length : 0;
+        RuntimeUIHelper.ReadOnlyField(content, "节点数量", nodeCount.ToString());
 
-        for (int i = 0; i < pts.Count; i++)
+        if (nodeCount > 0)
         {
-            int idx = i;
-            var pt = pts[idx];
+            var pts = new List<TimelinePointData>(data.timelinePoints);
 
-            string nodeTitle = "节点 " + idx;
-            if (!string.IsNullOrEmpty(pt.dateText)) nodeTitle += " (" + pt.dateText + ")";
-            RuntimeUIHelper.Section(content, nodeTitle);
-
-            RuntimeUIHelper.TextField(content, "日期文本", pt.dateText, v => { pt.dateText = v; SyncPoints(pts); });
-            RuntimeUIHelper.ReadOnlyField(content, "位置", "(" + pt.x.ToString("F1") + ", " + pt.y.ToString("F1") + ")");
-            RuntimeUIHelper.Btn(content, "点击场景重新定位", () => EnterPickMode(PickMode.TimelineNode, idx));
-
-            RuntimeUIHelper.Btn(content, "删除此节点", () =>
+            RuntimeUIHelper.Spacer(content, 2);
+            for (int i = 0; i < pts.Count; i++)
             {
-                pts.RemoveAt(idx);
-                SyncPoints(pts);
+                int idx = i;
+                var pt = pts[idx];
+                string posStr = "(" + pt.x.ToString("F1") + ", " + pt.y.ToString("F1") + ")";
+                string label = "节点 " + (i + 1);
+                if (!string.IsNullOrEmpty(pt.dateText)) label += " (" + pt.dateText + ")";
+                RuntimeUIHelper.ReadOnlyField(content, label, posStr);
+                RuntimeUIHelper.TextField(content, "  日期文本", pt.dateText, v => { pt.dateText = v; SyncPoints(pts); });
+            }
+
+            RuntimeUIHelper.Spacer(content, 2);
+            RuntimeUIHelper.Btn(content, "编辑时间轴节点", () => EnterTimelineEditMode(), RuntimeUIHelper.AccentBlue);
+            RuntimeUIHelper.Spacer(content, 2);
+            RuntimeUIHelper.Btn(content, "清除全部节点", () =>
+            {
+                data.timelinePoints = null;
                 BuildContent();
             }, RuntimeUIHelper.AccentRed);
         }
-
-        RuntimeUIHelper.Spacer(content, 4);
-        RuntimeUIHelper.Btn(content, "+ 点击场景添加节点", () => EnterPickMode(PickMode.TimelineNew), RuntimeUIHelper.AccentBlue);
     }
 
     private void SyncPoints(List<TimelinePointData> pts)

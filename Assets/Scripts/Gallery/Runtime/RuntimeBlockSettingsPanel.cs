@@ -213,7 +213,7 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
 
         if (blockData.weatherEnabled)
         {
-            RuntimeUIHelper.ButtonGroup(content, "天气类型:", WeatherNames, blockData.weatherType, v =>
+            RuntimeUIHelper.DropdownField(content, "天气类型", WeatherNames, blockData.weatherType, v =>
             {
                 blockData.weatherType = v;
                 BuildContent();
@@ -233,7 +233,7 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
     {
         RuntimeUIHelper.Section(content, "滤镜");
 
-        RuntimeUIHelper.ButtonGroup(content, "颜色滤镜:", ColorFilterNames, blockData.colorFilter, v =>
+        RuntimeUIHelper.DropdownField(content, "颜色滤镜", ColorFilterNames, blockData.colorFilter, v =>
         {
             blockData.colorFilter = v;
             BuildContent();
@@ -242,7 +242,7 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
             RuntimeUIHelper.FloatField(content, "颜色强度", blockData.colorFilterIntensity, v => blockData.colorFilterIntensity = Mathf.Clamp01(v));
 
         RuntimeUIHelper.Spacer(content, 2);
-        RuntimeUIHelper.ButtonGroup(content, "风格化:", ArtisticNames, blockData.artisticStyle, v =>
+        RuntimeUIHelper.DropdownField(content, "风格化", ArtisticNames, blockData.artisticStyle, v =>
         {
             blockData.artisticStyle = v;
             BuildContent();

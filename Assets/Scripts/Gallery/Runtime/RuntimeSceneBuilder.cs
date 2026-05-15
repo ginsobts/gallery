@@ -125,7 +125,19 @@ public class RuntimeSceneBuilder : MonoBehaviour
         if (bg != null) bg.SetDefaultColor(SceneDataHelper.ToColor(s.backgroundColor));
 
         var player = GalleryPlayer.Instance;
-        if (player != null) player.transform.position = new Vector3(s.playerStartX, s.playerStartY, 0);
+        if (player != null)
+        {
+            player.transform.position = new Vector3(s.playerStartX, s.playerStartY, 0);
+            if (!string.IsNullOrEmpty(s.playerMediaFile))
+            {
+                Sprite playerSprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, s.playerMediaFile);
+                if (playerSprite != null)
+                {
+                    var sr = player.GetComponent<SpriteRenderer>();
+                    if (sr != null) sr.sprite = playerSprite;
+                }
+            }
+        }
 
         ApplyBackgroundImage(s);
         ApplyCameraSettings(s);

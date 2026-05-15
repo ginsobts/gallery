@@ -123,7 +123,12 @@ public class GalleryManager : MonoBehaviour
     private void UpdateIntro()
     {
         var s = Settings;
-        if (s == null) { introFinished = true; return; }
+        if (s == null)
+        {
+            introFinished = true;
+            GalleryPlayer.Unfreeze();
+            return;
+        }
 
         introTimer += Time.deltaTime;
         float totalTime = s.introDuration + s.introFadeTime;
