@@ -13,14 +13,11 @@ public class RuntimeSettingsPanel : MonoBehaviour
     private bool needsRebuild;
     private bool pendingUIRebuild;
 
-    public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
+    private bool pickingTextPos;
+    private EffectData pickingTextFx;
+    private GameObject textPreviewGO;
 
-    private void Update()
-    {
-        if (!pendingUIRebuild) return;
-        pendingUIRebuild = false;
-        if (IsOpen) BuildContent();
-    }
+    public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
     private void ScheduleRebuild()
     {
@@ -446,6 +443,10 @@ public class RuntimeSettingsPanel : MonoBehaviour
             RuntimeUIHelper.FloatField(content, "显示时长", fx.textDuration, f => { fx.textDuration = f; needsRebuild = true; });
             RuntimeUIHelper.DropdownField(content, "文字效果", TextEffectNames,
                 Mathf.Clamp(fx.textEffect, 0, TextEffectNames.Length - 1), i => { fx.textEffect = i; needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "文字大小", fx.textSize, f => { fx.textSize = Mathf.Max(0.01f, f); needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "偏移 X", fx.textOffsetX, f => { fx.textOffsetX = f; needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "偏移 Y", fx.textOffsetY, f => { fx.textOffsetY = f; needsRebuild = true; });
+            RuntimeUIHelper.Btn(content, "拖拽设置文字位置", () => StartTextPositionPick(fx));
         }
 
         RuntimeUIHelper.ToggleField(content, "播放音效", fx.playSound, v => { fx.playSound = v; needsRebuild = true; ScheduleRebuild(); });
@@ -614,5 +615,84 @@ public class RuntimeSettingsPanel : MonoBehaviour
             });
             cBtn.AddComponent<LayoutElement>().preferredWidth = 14;
         }
+    }
+
+    // ── Text Position Picker ──
+
+    private void StartTextPositionPick(EffectData fx)
+    {
+        pickingTextPos = true;
+        pickingTextFx = fx;
+        if (panelRoot != null) panelRoot.SetActive(false);
+
+        if (textPreviewGO != null) Destroy(textPreviewGO);
+        textPreviewGO = new GameObject("TextPosPreview");
+        var tm = textPreviewGO.AddComponent<TextMesh>();
+        tm.text = string.IsNullOrEmpty(fx.text) ? "[文字位置]" : fx.text;
+        tm.characterSize = fx.textSize > 0 ? fx.textSize : 0.08f;
+        tm.fontSize = 80;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.alignment = TextAlignment.Center;
+        tm.color = new Color(1f, 1f, 0.5f, 0.9f);
+        textPreviewGO.GetComponent<MeshRenderer>().sortingOrder = 910;
+
+        if (currentTarget != null)
+            textPreviewGO.transform.position = currentTarget.transform.position + new Vector3(fx.textOffsetX, fx.textOffsetY, 0);
+
+        var editor = RuntimeEditor.Instance;
+        if (editor != null) editor.SetStatus("拖拽文字到目标位置，点击确认");
+    }
+
+    private void Update()
+    {
+        if (pendingUIRebuild)
+        {
+            pendingUIRebuild = false;
+            if (IsOpen) BuildContent();
+        }
+
+        if (pickingTextPos)
+            UpdateTextPositionPick();
+    }
+
+    private void UpdateTextPositionPick()
+    {
+        if (textPreviewGO == null || pickingTextFx == null)
+        {
+            FinishTextPositionPick();
+            return;
+        }
+
+        var cam = Camera.main;
+        if (cam == null) return;
+
+        Vector3 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
+        mouseWorld.z = 0;
+
+        if (Input.GetMouseButton(0))
+            textPreviewGO.transform.position = mouseWorld;
+
+        if (Input.GetMouseButtonUp(0))
+        {
+            if (currentTarget != null)
+            {
+                Vector3 elementPos = currentTarget.transform.position;
+                pickingTextFx.textOffsetX = mouseWorld.x - elementPos.x;
+                pickingTextFx.textOffsetY = mouseWorld.y - elementPos.y;
+            }
+            needsRebuild = true;
+            FinishTextPositionPick();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            FinishTextPositionPick();
+    }
+
+    private void FinishTextPositionPick()
+    {
+        pickingTextPos = false;
+        pickingTextFx = null;
+        if (textPreviewGO != null) { Destroy(textPreviewGO); textPreviewGO = null; }
+        if (panelRoot != null) panelRoot.SetActive(true);
     }
 }

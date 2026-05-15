@@ -362,6 +362,10 @@ public static class RuntimeUIHelper
         itemLabel.color = Color.white;
         itemLabel.alignment = TextAnchor.MiddleLeft;
 
+        var tCanvas = templateGO.AddComponent<Canvas>();
+        tCanvas.overrideSorting = true;
+        tCanvas.sortingOrder = 30000;
+        templateGO.AddComponent<GraphicRaycaster>();
         templateGO.SetActive(false);
 
         var dropdown = dropGO.AddComponent<Dropdown>();

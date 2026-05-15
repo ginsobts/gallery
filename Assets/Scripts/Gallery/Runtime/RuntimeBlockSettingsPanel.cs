@@ -179,11 +179,29 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
                     string fullPath = System.IO.Path.Combine(SceneDataHelper.GetScenePath(editor.CurrentSceneName), rel);
                     RuntimeAssetLoader.Instance.InvalidateCache(fullPath);
                     blockData.backgroundMediaFile = rel;
+                    FitBackgroundToSprite(blockData, editor.CurrentSceneName);
                     BuildContent();
                 }
             });
-        RuntimeUIHelper.FloatField(content, "缩放X", blockData.backgroundScaleX, v => blockData.backgroundScaleX = v);
-        RuntimeUIHelper.FloatField(content, "缩放Y", blockData.backgroundScaleY, v => blockData.backgroundScaleY = v);
+        RuntimeUIHelper.FloatField(content, "缩放X", blockData.backgroundScaleX, v => { blockData.backgroundScaleX = v; Preview(); });
+        RuntimeUIHelper.FloatField(content, "缩放Y", blockData.backgroundScaleY, v => { blockData.backgroundScaleY = v; Preview(); });
+    }
+
+    private void FitBackgroundToSprite(BlockSettingsData bd, string sceneName)
+    {
+        if (string.IsNullOrEmpty(bd.backgroundMediaFile)) return;
+        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(sceneName, bd.backgroundMediaFile);
+        if (sprite == null) return;
+
+        float spriteW = sprite.bounds.size.x;
+        float spriteH = sprite.bounds.size.y;
+        if (spriteW <= 0 || spriteH <= 0) return;
+
+        float oldArea = Mathf.Abs(bd.backgroundScaleX * bd.backgroundScaleY);
+        if (oldArea <= 0) oldArea = 20f * 12f;
+        float uniformScale = Mathf.Sqrt(oldArea / (spriteW * spriteH));
+        bd.backgroundScaleX = uniformScale;
+        bd.backgroundScaleY = uniformScale;
     }
 
     // ── Lighting ──

@@ -912,10 +912,28 @@ public class RuntimeEditor : MonoBehaviour
         RuntimeAssetLoader.Instance.InvalidateCache(fullPath);
 
         currentScene.settings.backgroundMediaFile = rel;
+        FitBackgroundToSprite(currentScene.settings);
         var builder = RuntimeSceneBuilder.Instance;
         if (builder != null) builder.ApplyBackgroundImage(currentScene.settings);
         SaveScene();
         SetStatus("背景已设置: " + rel);
+    }
+
+    private void FitBackgroundToSprite(SceneSettingsData s)
+    {
+        if (string.IsNullOrEmpty(s.backgroundMediaFile)) return;
+        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, s.backgroundMediaFile);
+        if (sprite == null) return;
+
+        float spriteW = sprite.bounds.size.x;
+        float spriteH = sprite.bounds.size.y;
+        if (spriteW <= 0 || spriteH <= 0) return;
+
+        float oldArea = Mathf.Abs(s.backgroundScaleX * s.backgroundScaleY);
+        if (oldArea <= 0) oldArea = 20f * 12f;
+        float uniformScale = Mathf.Sqrt(oldArea / (spriteW * spriteH));
+        s.backgroundScaleX = uniformScale;
+        s.backgroundScaleY = uniformScale;
     }
 
     public void MoveElementToTop(ElementData elem)

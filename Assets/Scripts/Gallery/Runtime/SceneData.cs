@@ -319,6 +319,9 @@ public class EffectData
     public string text = "";
     public float textDuration = 4f;
     public int textEffect = 0;
+    public float textOffsetX = 0f;
+    public float textOffsetY = 0f;
+    public float textSize = 0.08f;
     public bool playSound = false;
     public string soundFile = "";
     public float soundVolume = 0.8f;

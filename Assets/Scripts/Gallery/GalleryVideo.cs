@@ -238,7 +238,8 @@ public class GalleryVideo : MonoBehaviour
     private void ExecuteEffects(FrameEffectSet fx)
     {
         if (fx.zoom) ZoomImage();
-        if (fx.showText && !string.IsNullOrEmpty(fx.text)) ShowTextPopup(fx.text, fx.textDuration, fx.textEffect);
+        if (fx.showText && !string.IsNullOrEmpty(fx.text))
+            ShowTextPopup(fx.text, fx.textDuration, fx.textEffect, fx.textOffsetX, fx.textOffsetY, fx.textSize);
         if (fx.playSound && fx.soundClip != null) PlayEffectSound(fx.soundClip, fx.soundVolume);
         if (fx.changeBGM && fx.bgmClip != null) ChangeBGM(fx.bgmClip, fx.bgmVolume);
         if (fx.changeWeather) ChangeWeather(fx.weatherType, fx.weatherParticles, fx.weatherColor);
@@ -283,14 +284,14 @@ public class GalleryVideo : MonoBehaviour
         overlay.AddComponent<ZoomOverlayClose>();
     }
 
-    private void ShowTextPopup(string text, float duration, int textEffect = 0)
+    private void ShowTextPopup(string text, float duration, int textEffect = 0, float offsetX = 0f, float offsetY = 0f, float size = 0.08f)
     {
-        var cam = Camera.main;
         var go = new GameObject("TextPopup");
-        go.transform.position = cam.transform.position + Vector3.forward * 4.8f + Vector3.down * (cam.orthographicSize * 0.6f);
+        Vector3 basePos = transform.position + new Vector3(offsetX, offsetY, 0);
+        go.transform.position = basePos;
 
         var tm = go.AddComponent<TextMesh>();
-        tm.characterSize = 0.08f;
+        tm.characterSize = size > 0 ? size : 0.08f;
         tm.fontSize = 80;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;

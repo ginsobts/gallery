@@ -679,6 +679,9 @@ public class RuntimeSceneBuilder : MonoBehaviour
         fx.text = data.text;
         fx.textDuration = data.textDuration;
         fx.textEffect = data.textEffect;
+        fx.textOffsetX = data.textOffsetX;
+        fx.textOffsetY = data.textOffsetY;
+        fx.textSize = data.textSize > 0 ? data.textSize : 0.08f;
         fx.playSound = data.playSound;
         fx.soundVolume = data.soundVolume;
         fx.changeBGM = data.changeBGM;
