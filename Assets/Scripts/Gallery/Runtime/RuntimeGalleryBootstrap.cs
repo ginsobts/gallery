@@ -9,6 +9,12 @@ public class RuntimeGalleryBootstrap : MonoBehaviour
     [Tooltip("是否启用运行时编辑器（Tab键切换）")]
     [SerializeField] private bool enableEditor = true;
 
+    [Header("NPC 默认贴图")]
+    [Tooltip("NPC 对话类型的默认贴图（未指定媒体文件时使用）")]
+    [SerializeField] private Sprite npcDialogueDefaultSprite;
+    [Tooltip("NPC 跟随类型的默认贴图（未指定媒体文件时使用）")]
+    [SerializeField] private Sprite npcFollowerDefaultSprite;
+
     private void Awake()
     {
         EnsureEventSystem();
@@ -17,7 +23,8 @@ public class RuntimeGalleryBootstrap : MonoBehaviour
     private void Start()
     {
         var builderGO = new GameObject("RuntimeSceneBuilder");
-        builderGO.AddComponent<RuntimeSceneBuilder>();
+        var builder = builderGO.AddComponent<RuntimeSceneBuilder>();
+        builder.SetNPCDefaults(npcDialogueDefaultSprite, npcFollowerDefaultSprite);
 
         if (enableEditor)
         {
@@ -27,6 +34,20 @@ public class RuntimeGalleryBootstrap : MonoBehaviour
             editorGO.AddComponent<RuntimeSceneBrowser>();
         }
 
+        if (SceneDataInstaller.NeedsInstall())
+            StartCoroutine(InstallThenLoad());
+        else
+            LoadDefaultScene();
+    }
+
+    private System.Collections.IEnumerator InstallThenLoad()
+    {
+        yield return SceneDataInstaller.InstallDefaultScenes();
+        LoadDefaultScene();
+    }
+
+    private void LoadDefaultScene()
+    {
         string sceneToLoad = autoLoadScene;
         if (string.IsNullOrEmpty(sceneToLoad))
             sceneToLoad = PlayerPrefs.GetString("Gallery_LastScene", "");

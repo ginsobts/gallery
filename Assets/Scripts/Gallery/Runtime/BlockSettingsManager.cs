@@ -246,6 +246,9 @@ public class BlockSettingsManager : MonoBehaviour
         targetBlockData = settings.GetBlockSettings(newBlock);
         transitionT = 0f;
 
+        if (targetBlockData.dismissFollowers)
+            GalleryNPCDialogue.DismissAllFollowers();
+
         StartBGTransition(targetBlockData);
         StartBGMTransition(targetBlockData);
 

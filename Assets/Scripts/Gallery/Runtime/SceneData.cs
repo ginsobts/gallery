@@ -38,12 +38,25 @@ public class SceneSettingsData
     public float playerStartX = 0f;
     public float playerStartY = 0f;
     public string playerMediaFile = "";
+
+    // Player directional animation
+    public string[] playerWalkUpFiles;
+    public string[] playerWalkDownFiles;
+    public string[] playerWalkLeftFiles;
+    public string[] playerWalkRightFiles;
+    public string[] playerIdleUpFiles;
+    public string[] playerIdleDownFiles;
+    public string[] playerIdleLeftFiles;
+    public string[] playerIdleRightFiles;
+    public float playerAnimFps = 6f;
     public float groundWidth = 40f;
     public float groundHeight = 12f;
     public string groundMediaFile = "";
     public string backgroundMediaFile = "";
     public float backgroundScaleX = 20f;
     public float backgroundScaleY = 12f;
+    public float backgroundX = 0f;
+    public float backgroundY = 0f;
 
     // Camera block settings
     public int cameraBlockCount = 1;
@@ -124,6 +137,9 @@ public class BlockSettingsData
     public string bgmFile = "";
     public float bgmVolume = 0.4f;
     public float bgmFadeTime = 1.5f;
+
+    // NPC followers
+    public bool dismissFollowers = false;
 }
 
 [Serializable]
@@ -147,6 +163,11 @@ public class ElementData
     public string caption = "";
     public bool enabled = true;
     public bool hasCollider = true;
+    public bool mediaFitted = false;
+
+    // Physics
+    public bool pushable = false;
+    public float pushFriction = 5f;
 
     // Photo-specific
     public PhotoData photo;
@@ -230,6 +251,26 @@ public class NPCDialogueData
     public float[] textColor = { 0.1f, 0.1f, 0.1f, 1f };
     public float textSize = 0.06f;
     public float typeSpeed = 15f;
+
+    // Follow player
+    public bool canFollow = false;
+    public float followDistance = 1.5f;
+    public float followSpeed = 3f;
+    public float recordInterval = 0.1f;
+
+    // Directional walk animation (for following)
+    public string[] walkUpFiles;
+    public string[] walkDownFiles;
+    public string[] walkLeftFiles;
+    public string[] walkRightFiles;
+    public float walkAnimFps = 6f;
+
+    // Directional idle animation
+    public string[] idleUpFiles;
+    public string[] idleDownFiles;
+    public string[] idleLeftFiles;
+    public string[] idleRightFiles;
+    public float idleAnimFps = 4f;
 }
 
 [Serializable]
@@ -246,8 +287,18 @@ public class NPCFollowerData
     public float followDistance = -1f;
     public float followSpeed = -1f;
     public float recordInterval = 0.1f;
-    public string[] walkFrameFiles;
+    public string[] walkFrameFiles; // legacy, treated as walkDown
     public float animFps = 6f;
+
+    // Directional walk/idle animation
+    public string[] walkUpFiles;
+    public string[] walkDownFiles;
+    public string[] walkLeftFiles;
+    public string[] walkRightFiles;
+    public string[] idleUpFiles;
+    public string[] idleDownFiles;
+    public string[] idleLeftFiles;
+    public string[] idleRightFiles;
 }
 
 [Serializable]
@@ -288,6 +339,7 @@ public class EffectData
     public bool toggleObject = false;
     public string targetElementId = "";
     public bool objectShow = true;
+    public bool followPlayer = false;
 }
 
 public static class SceneDataHelper

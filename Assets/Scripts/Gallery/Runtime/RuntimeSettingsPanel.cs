@@ -95,7 +95,6 @@ public class RuntimeSettingsPanel : MonoBehaviour
             case "photo": BuildPhotoSection(); break;
             case "video": BuildVideoSection(); break;
             case "npc_dialogue": BuildNPCDialogueSection(); break;
-            case "npc_follower": BuildNPCFollowerSection(); break;
             case "weather": BuildWeatherSection(); break;
         }
 
@@ -146,6 +145,7 @@ public class RuntimeSettingsPanel : MonoBehaviour
                 if (!string.IsNullOrEmpty(rel))
                 {
                     currentData.mediaFile = rel;
+                    currentData.mediaFitted = false;
                     string newFullPath = System.IO.Path.Combine(
                         SceneDataHelper.GetScenePath(editor.CurrentSceneName), rel);
                     RuntimeAssetLoader.Instance.InvalidateCache(newFullPath);
@@ -167,11 +167,29 @@ public class RuntimeSettingsPanel : MonoBehaviour
         RuntimeUIHelper.Section(content, "变换");
         RuntimeUIHelper.FloatField(content, "位置 X", currentData.x, v => { currentData.x = v; ApplyTransform(); });
         RuntimeUIHelper.FloatField(content, "位置 Y", currentData.y, v => { currentData.y = v; ApplyTransform(); });
-        RuntimeUIHelper.FloatField(content, "缩放 X", currentData.scaleX, v => { currentData.scaleX = v; ApplyTransform(); });
-        RuntimeUIHelper.FloatField(content, "缩放 Y", currentData.scaleY, v => { currentData.scaleY = v; ApplyTransform(); });
-        RuntimeUIHelper.IntField(content, "排序层", currentData.sortingOrder, v => { currentData.sortingOrder = v; needsRebuild = true; });
-        RuntimeUIHelper.ToggleField(content, "有碰撞体", currentData.hasCollider, v => { currentData.hasCollider = v; needsRebuild = true; });
-        RuntimeUIHelper.TextField(content, "说明文字", currentData.caption, v => { currentData.caption = v; needsRebuild = true; });
+
+        if (currentData.type == "weather")
+        {
+            if (currentData.weather == null) currentData.weather = new WeatherData();
+            RuntimeUIHelper.FloatField(content, "范围 X", currentData.weather.sizeX, v => { currentData.weather.sizeX = Mathf.Max(0.5f, v); needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "范围 Y", currentData.weather.sizeY, v => { currentData.weather.sizeY = Mathf.Max(0.5f, v); needsRebuild = true; });
+        }
+        else
+        {
+            RuntimeUIHelper.FloatField(content, "缩放 X", currentData.scaleX, v => { currentData.scaleX = v; ApplyTransform(); });
+            RuntimeUIHelper.FloatField(content, "缩放 Y", currentData.scaleY, v => { currentData.scaleY = v; ApplyTransform(); });
+            RuntimeUIHelper.IntField(content, "排序层", currentData.sortingOrder, v => { currentData.sortingOrder = v; needsRebuild = true; });
+            RuntimeUIHelper.ToggleField(content, "有碰撞体", currentData.hasCollider, v => { currentData.hasCollider = v; needsRebuild = true; });
+            RuntimeUIHelper.TextField(content, "说明文字", currentData.caption, v => { currentData.caption = v; needsRebuild = true; });
+
+            if (currentData.type == "photo" || currentData.type == "video" || currentData.type == "npc_dialogue")
+            {
+                RuntimeUIHelper.Spacer(content, 4);
+                RuntimeUIHelper.ToggleField(content, "可被玩家推动", currentData.pushable, v => { currentData.pushable = v; needsRebuild = true; });
+                if (currentData.pushable)
+                    RuntimeUIHelper.FloatField(content, "摩擦力", currentData.pushFriction, v => { currentData.pushFriction = Mathf.Max(0f, v); needsRebuild = true; });
+            }
+        }
         RuntimeUIHelper.Spacer(content);
     }
 
@@ -179,7 +197,8 @@ public class RuntimeSettingsPanel : MonoBehaviour
     {
         if (currentTarget == null) return;
         currentTarget.transform.position = new Vector3(currentData.x, currentData.y, 0);
-        currentTarget.transform.localScale = new Vector3(currentData.scaleX, currentData.scaleY, 1);
+        if (currentData.type != "weather")
+            currentTarget.transform.localScale = new Vector3(currentData.scaleX, currentData.scaleY, 1);
     }
 
     // ── Photo ──
@@ -279,6 +298,33 @@ public class RuntimeSettingsPanel : MonoBehaviour
             }
         }
         RuntimeUIHelper.Btn(content, "+ 添加对话行", () => { AddDialogueLine(nd); ScheduleRebuild(); });
+
+        RuntimeUIHelper.Spacer(content, 6);
+        RuntimeUIHelper.Section(content, "NPC 待机方向动画");
+        RuntimeUIHelper.FloatField(content, "帧率 (FPS)", nd.idleAnimFps, f => { nd.idleAnimFps = Mathf.Max(0.1f, f); needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-上", nd.idleUpFiles, files => { nd.idleUpFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-下", nd.idleDownFiles, files => { nd.idleDownFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-左", nd.idleLeftFiles, files => { nd.idleLeftFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-右", nd.idleRightFiles, files => { nd.idleRightFiles = files; needsRebuild = true; });
+
+        RuntimeUIHelper.Spacer(content, 6);
+        RuntimeUIHelper.Section(content, "NPC 跟随设置");
+        RuntimeUIHelper.ToggleField(content, "可跟随玩家", nd.canFollow, b => { nd.canFollow = b; needsRebuild = true; ScheduleRebuild(); });
+        if (nd.canFollow)
+        {
+            RuntimeUIHelper.FloatField(content, "跟随距离", nd.followDistance, f => { nd.followDistance = f; needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "跟随速度", nd.followSpeed, f => { nd.followSpeed = f; needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "记录间隔", nd.recordInterval, f => { nd.recordInterval = f; needsRebuild = true; });
+            RuntimeUIHelper.FloatField(content, "行走帧率", nd.walkAnimFps, f => { nd.walkAnimFps = Mathf.Max(0.1f, f); needsRebuild = true; });
+
+            RuntimeUIHelper.Spacer(content, 4);
+            RuntimeUIHelper.Label(content, "NPC 行走方向动画", 12);
+            BuildNpcDirFrameRow("行走-上", nd.walkUpFiles, files => { nd.walkUpFiles = files; needsRebuild = true; });
+            BuildNpcDirFrameRow("行走-下", nd.walkDownFiles, files => { nd.walkDownFiles = files; needsRebuild = true; });
+            BuildNpcDirFrameRow("行走-左", nd.walkLeftFiles, files => { nd.walkLeftFiles = files; needsRebuild = true; });
+            BuildNpcDirFrameRow("行走-右", nd.walkRightFiles, files => { nd.walkRightFiles = files; needsRebuild = true; });
+        }
+
         RuntimeUIHelper.Spacer(content);
     }
 
@@ -310,22 +356,36 @@ public class RuntimeSettingsPanel : MonoBehaviour
         RuntimeUIHelper.FloatField(content, "跟随速度", nf.followSpeed, f => { nf.followSpeed = f; needsRebuild = true; });
         RuntimeUIHelper.FloatField(content, "记录间隔", nf.recordInterval, f => { nf.recordInterval = f; needsRebuild = true; });
         RuntimeUIHelper.FloatField(content, "动画帧率", nf.animFps, f => { nf.animFps = f; needsRebuild = true; });
+
+        RuntimeUIHelper.Spacer(content, 6);
+        RuntimeUIHelper.Section(content, "方向动画");
+        BuildNpcDirFrameRow("行走-上", nf.walkUpFiles, files => { nf.walkUpFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("行走-下", nf.walkDownFiles, files => { nf.walkDownFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("行走-左", nf.walkLeftFiles, files => { nf.walkLeftFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("行走-右", nf.walkRightFiles, files => { nf.walkRightFiles = files; needsRebuild = true; });
+        RuntimeUIHelper.Spacer(content, 2);
+        BuildNpcDirFrameRow("待机-上", nf.idleUpFiles, files => { nf.idleUpFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-下", nf.idleDownFiles, files => { nf.idleDownFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-左", nf.idleLeftFiles, files => { nf.idleLeftFiles = files; needsRebuild = true; });
+        BuildNpcDirFrameRow("待机-右", nf.idleRightFiles, files => { nf.idleRightFiles = files; needsRebuild = true; });
+
         RuntimeUIHelper.Spacer(content);
     }
 
     // ── Weather ──
+    private static readonly string[] WeatherTypeNames = { "雨", "雪", "雾", "阳光", "萤火虫" };
+
     private void BuildWeatherSection()
     {
         if (currentData.weather == null) currentData.weather = new WeatherData();
         var w = currentData.weather;
 
-        RuntimeUIHelper.Section(content, "天气设置");
-        RuntimeUIHelper.IntField(content, "天气类型", w.weatherType, i => { w.weatherType = i; needsRebuild = true; });
-        RuntimeUIHelper.Label(content, "(0=无 1=雪 2=雨 3=花瓣 4=萤火虫)", 10);
-        RuntimeUIHelper.IntField(content, "粒子数量", w.particleCount, i => { w.particleCount = i; needsRebuild = true; });
-        RuntimeUIHelper.FloatField(content, "强度", w.intensity, f => { w.intensity = f; needsRebuild = true; });
-        RuntimeUIHelper.FloatField(content, "范围 X", w.sizeX, f => { w.sizeX = f; needsRebuild = true; });
-        RuntimeUIHelper.FloatField(content, "范围 Y", w.sizeY, f => { w.sizeY = f; needsRebuild = true; });
+        RuntimeUIHelper.Section(content, "粒子效果");
+        RuntimeUIHelper.DropdownField(content, "天气类型", WeatherTypeNames,
+            Mathf.Clamp(w.weatherType, 0, WeatherTypeNames.Length - 1),
+            i => { w.weatherType = i; needsRebuild = true; });
+        RuntimeUIHelper.IntField(content, "粒子数量", w.particleCount, i => { w.particleCount = Mathf.Max(1, i); needsRebuild = true; });
+        RuntimeUIHelper.FloatField(content, "强度", w.intensity, f => { w.intensity = Mathf.Max(0.01f, f); needsRebuild = true; });
         BuildColorField("粒子颜色", w.particleColor, arr => { w.particleColor = arr; needsRebuild = true; });
         RuntimeUIHelper.Spacer(content);
     }
@@ -475,6 +535,30 @@ public class RuntimeSettingsPanel : MonoBehaviour
             RuntimeUIHelper.TextField(content, "目标ID", fx.targetElementId, s => { fx.targetElementId = s; needsRebuild = true; });
             RuntimeUIHelper.ToggleField(content, "显示(开)", fx.objectShow, v => { fx.objectShow = v; needsRebuild = true; });
         }
+
+        if (currentData != null && currentData.type == "npc_dialogue")
+        {
+            RuntimeUIHelper.ToggleField(content, "跟随玩家", fx.followPlayer, v => { fx.followPlayer = v; needsRebuild = true; });
+        }
+    }
+
+    // ── Directional Frame Upload Helper ──
+    private void BuildNpcDirFrameRow(string label, string[] currentFiles, System.Action<string[]> onChanged)
+    {
+        int count = currentFiles != null ? currentFiles.Length : 0;
+        RuntimeUIHelper.Btn(content, label + " [" + count + "帧]  选择", () =>
+        {
+            string[] paths = NativeFilePicker.PickMultipleImageFiles("选择" + label + "帧（多选）");
+            if (paths == null || paths.Length == 0) return;
+            var editor = RuntimeEditor.Instance;
+            if (editor == null) return;
+            var relFiles = new string[paths.Length];
+            for (int i = 0; i < paths.Length; i++)
+                relFiles[i] = RuntimeAssetLoader.Instance.CopyMediaToScene(paths[i], editor.CurrentSceneName);
+            onChanged(relFiles);
+            editor.SetStatus(label + ": 已设置 " + relFiles.Length + " 帧");
+            ScheduleRebuild();
+        }, count > 0 ? RuntimeUIHelper.AccentGreen : RuntimeUIHelper.BtnNormal);
     }
 
     // ── Color Picker (simple RGB) ──

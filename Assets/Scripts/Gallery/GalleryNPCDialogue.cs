@@ -12,6 +12,10 @@ public class GalleryNPCDialogue : MonoBehaviour
         public int textEffect;
     }
 
+    [Header("外观")]
+    [Tooltip("默认贴图（运行时未指定媒体文件时使用此贴图）")]
+    [SerializeField] private Sprite defaultSprite;
+
     [Header("对话内容")]
     [SerializeField] private DialogueLine[] lines;
     [Tooltip("对话结束后是否循环")]
@@ -59,15 +63,61 @@ public class GalleryNPCDialogue : MonoBehaviour
     private GameObject effectPromptGO;
     private bool approachEffectTriggered;
     private AudioSource effectAudioSrc;
+    private DirectionalAnimator dirAnimator;
+
+    // Following state
+    private bool canFollow;
+    private bool isFollowing;
+    private float followDistance = 1.5f;
+    private float followSpeed = 3f;
+    private float followRecordInterval = 0.1f;
+    private Vector3 followHomePos;
+    private Vector3 prevPos;
+
+    private const int MaxHistory = 500;
+    private Vector3[] historyBuffer;
+    private int historyStart;
+    private int historyCount;
+    private Vector3 lastRecordedPos;
+
+    public Sprite DefaultSprite => defaultSprite;
+    public bool IsFollowing => isFollowing;
 
     private void Start()
     {
         if (GalleryPlayer.Instance != null)
             playerTransform = GalleryPlayer.Instance.transform;
 
+        if (defaultSprite != null)
+        {
+            var sr = GetComponent<SpriteRenderer>();
+            if (sr != null && sr.sprite == RuntimeSprite.Get())
+                sr.sprite = defaultSprite;
+        }
+
+        dirAnimator = GetComponent<DirectionalAnimator>();
+        if (dirAnimator == null)
+            dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
+        dirAnimator.SetWalking(false);
+        dirAnimator.SetDirection(DirectionalAnimator.Direction.Down);
+
+        followHomePos = transform.position;
+        prevPos = transform.position;
+
         CreateBubble();
         bubbleGO.SetActive(false);
     }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (defaultSprite != null)
+        {
+            var sr = GetComponent<SpriteRenderer>();
+            if (sr != null) sr.sprite = defaultSprite;
+        }
+    }
+#endif
 
     private void CreateBubble()
     {
@@ -116,6 +166,17 @@ public class GalleryNPCDialogue : MonoBehaviour
         float sqrDist = diff.sqrMagnitude;
         playerInRange = sqrDist <= triggerDistance * triggerDistance;
 
+        if (dirAnimator != null && playerInRange)
+        {
+            Vector2 toPlayer = -diff;
+            DirectionalAnimator.Direction faceDir;
+            if (Mathf.Abs(toPlayer.x) >= Mathf.Abs(toPlayer.y))
+                faceDir = toPlayer.x > 0 ? DirectionalAnimator.Direction.Right : DirectionalAnimator.Direction.Left;
+            else
+                faceDir = toPlayer.y > 0 ? DirectionalAnimator.Direction.Up : DirectionalAnimator.Direction.Down;
+            dirAnimator.SetDirection(faceDir);
+        }
+
         if (!dialogueActive)
         {
             if (hasFinished && !loop) { }
@@ -133,6 +194,16 @@ public class GalleryNPCDialogue : MonoBehaviour
             EndDialogue();
 
         UpdateEffects(sqrDist);
+
+        if (isFollowing)
+        {
+            RecordPlayerPosition();
+            FollowPath();
+            UpdateFollowAnimation();
+
+            if (Input.GetKeyDown(KeyCode.Q))
+                StopFollowing();
+        }
     }
 
     private void UpdateEffects(float sqrDist)
@@ -180,6 +251,7 @@ public class GalleryNPCDialogue : MonoBehaviour
         if (fx.loadScene && !string.IsNullOrEmpty(fx.sceneName))
             UnityEngine.SceneManagement.SceneManager.LoadScene(fx.sceneName);
         if (fx.toggleObject && fx.targetObject != null) fx.targetObject.SetActive(fx.objectShow);
+        if (fx.followPlayer && canFollow) StartFollowing();
     }
 
     private void ZoomNPC()
@@ -421,6 +493,17 @@ public class GalleryNPCDialogue : MonoBehaviour
         enableApproachEffects = enable; approachEffectDistance = distance; approachEffectOnlyOnce = onlyOnce; approachEffects = effects ?? new FrameEffectSet();
     }
 
+    public DirectionalAnimator GetDirectionalAnimator()
+    {
+        if (dirAnimator == null)
+        {
+            dirAnimator = GetComponent<DirectionalAnimator>();
+            if (dirAnimator == null)
+                dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
+        }
+        return dirAnimator;
+    }
+
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = new Color(0.3f, 0.9f, 0.5f, 0.3f);
@@ -435,6 +518,121 @@ public class GalleryNPCDialogue : MonoBehaviour
         {
             Gizmos.color = new Color(1f, 0.5f, 0.3f, 0.2f);
             Gizmos.DrawWireSphere(transform.position, approachEffectDistance);
+        }
+    }
+
+    // ── Follow logic ──
+
+    public void SetFollowParams(bool canFollowPlayer, float distance, float speed, float interval)
+    {
+        canFollow = canFollowPlayer;
+        followDistance = distance;
+        followSpeed = speed;
+        followRecordInterval = interval;
+    }
+
+    public void StartFollowing()
+    {
+        if (!canFollow || isFollowing || playerTransform == null) return;
+        isFollowing = true;
+        historyBuffer = new Vector3[MaxHistory];
+        historyStart = 0;
+        historyCount = 1;
+        historyBuffer[0] = playerTransform.position;
+        lastRecordedPos = playerTransform.position;
+    }
+
+    public void StopFollowing()
+    {
+        if (!isFollowing) return;
+        isFollowing = false;
+        if (dirAnimator != null) dirAnimator.SetWalking(false);
+    }
+
+    private Vector3 HistoryAt(int logicalIndex)
+    {
+        return historyBuffer[(historyStart + logicalIndex) % MaxHistory];
+    }
+
+    private void HistoryPush(Vector3 pos)
+    {
+        if (historyCount < MaxHistory)
+        {
+            historyBuffer[(historyStart + historyCount) % MaxHistory] = pos;
+            historyCount++;
+        }
+        else
+        {
+            historyBuffer[historyStart] = pos;
+            historyStart = (historyStart + 1) % MaxHistory;
+        }
+    }
+
+    private void RecordPlayerPosition()
+    {
+        if (playerTransform == null) return;
+        float dist = Vector3.Distance(playerTransform.position, lastRecordedPos);
+        if (dist >= followRecordInterval)
+        {
+            HistoryPush(playerTransform.position);
+            lastRecordedPos = playerTransform.position;
+        }
+    }
+
+    private void FollowPath()
+    {
+        float targetDist = followDistance;
+        float accumulated = 0f;
+        Vector3 targetPos = transform.position;
+
+        for (int i = historyCount - 1; i > 0; i--)
+        {
+            Vector3 cur = HistoryAt(i);
+            Vector3 prev = HistoryAt(i - 1);
+            float segLen = Vector3.Distance(cur, prev);
+            accumulated += segLen;
+            if (accumulated >= targetDist)
+            {
+                float overshoot = accumulated - targetDist;
+                Vector3 dir = (cur - prev).normalized;
+                targetPos = prev + dir * overshoot;
+                break;
+            }
+        }
+
+        if (accumulated < targetDist && historyCount > 0)
+            targetPos = HistoryAt(0);
+
+        transform.position = Vector3.MoveTowards(
+            transform.position, targetPos, followSpeed * Time.deltaTime);
+    }
+
+    private void UpdateFollowAnimation()
+    {
+        if (dirAnimator == null) return;
+
+        Vector3 delta = transform.position - prevPos;
+        prevPos = transform.position;
+        bool moving = delta.sqrMagnitude > 0.0001f;
+
+        if (moving)
+        {
+            DirectionalAnimator.Direction dir;
+            if (Mathf.Abs(delta.x) >= Mathf.Abs(delta.y))
+                dir = delta.x > 0 ? DirectionalAnimator.Direction.Right : DirectionalAnimator.Direction.Left;
+            else
+                dir = delta.y > 0 ? DirectionalAnimator.Direction.Up : DirectionalAnimator.Direction.Down;
+            dirAnimator.SetDirection(dir);
+        }
+        dirAnimator.SetWalking(moving);
+    }
+
+    public static void DismissAllFollowers()
+    {
+        var all = FindObjectsOfType<GalleryNPCDialogue>();
+        foreach (var npc in all)
+        {
+            if (npc.isFollowing) npc.StopFollowing();
         }
     }
 }

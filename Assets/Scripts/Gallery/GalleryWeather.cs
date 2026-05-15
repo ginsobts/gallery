@@ -96,6 +96,8 @@ public class GalleryWeather : MonoBehaviour
     {
         if (mainCam == null) { mainCam = Camera.main; if (mainCam == null) return; }
 
+        RefreshArea();
+
         float dx = mainCam.transform.position.x - areaCenter.x;
         float dy = mainCam.transform.position.y - areaCenter.y;
         float distSqr = dx * dx + dy * dy;
@@ -109,6 +111,16 @@ public class GalleryWeather : MonoBehaviour
         }
 
         if (isVisible) UpdateParticles();
+    }
+
+    private void RefreshArea()
+    {
+        if (areaCol == null) return;
+        areaCenter = transform.position + (Vector3)areaCol.offset;
+        areaHalf = Vector3.Scale(areaCol.size, transform.localScale) * 0.5f;
+        float maxExtent = Mathf.Max(areaHalf.x, areaHalf.y);
+        float cullDist = 25f + maxExtent;
+        cullMaxExtentSqr = cullDist * cullDist;
     }
 
     private void UpdateAudio()
@@ -181,6 +193,12 @@ public class GalleryWeather : MonoBehaviour
         int start = evenFrame ? 0 : halfCount;
         int end = evenFrame ? halfCount : count;
 
+        float boundsMargin = 3f;
+        float minX = areaCenter.x - areaHalf.x - boundsMargin;
+        float maxX = areaCenter.x + areaHalf.x + boundsMargin;
+        float minY = areaCenter.y - areaHalf.y - boundsMargin;
+        float maxY = areaCenter.y + areaHalf.y + boundsMargin;
+
         for (int i = start; i < end; i++)
         {
             var p = particles[i];
@@ -188,7 +206,10 @@ public class GalleryWeather : MonoBehaviour
             p.life += dt * 2f;
             float t = p.life / p.maxLife;
 
-            if (t >= 1f)
+            bool outOfBounds = p.position.x < minX || p.position.x > maxX
+                            || p.position.y < minY || p.position.y > maxY;
+
+            if (t >= 1f || outOfBounds)
             {
                 ResetParticle(ref p, false);
                 particles[i] = p;
@@ -349,11 +370,12 @@ public class GalleryWeather : MonoBehaviour
 #endif
     }
 
-    public void SetWeather(WeatherType type, int count, Color color)
+    public void SetWeather(WeatherType type, int count, Color color, float newIntensity = 1f)
     {
         weatherType = type;
         particleCount = count;
         particleColor = color;
+        intensity = newIntensity;
         if (particleGOs != null)
         {
             for (int i = 0; i < particleGOs.Length; i++)

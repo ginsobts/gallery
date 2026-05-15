@@ -219,6 +219,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoLoadScene: 
   enableEditor: 1
+  npcDialogueDefaultSprite: {fileID: 21300000, guid: a4923f05368ea3240b11b8fdd8ee7e19, type: 3}
+  npcFollowerDefaultSprite: {fileID: 21300000, guid: a4923f05368ea3240b11b8fdd8ee7e19, type: 3}
 --- !u!4 &490836671
 Transform:
   m_ObjectHideFlags: 0
@@ -336,11 +338,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1430830711023500530, guid: c37098bc3e5b45e45980d93c40e939af, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -8
+      value: -13.9
       objectReference: {fileID: 0}
     - target: {fileID: 1430830711023500530, guid: c37098bc3e5b45e45980d93c40e939af, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -8
+      value: -9.3
       objectReference: {fileID: 0}
     - target: {fileID: 1430830711023500530, guid: c37098bc3e5b45e45980d93c40e939af, type: 3}
       propertyPath: m_LocalPosition.z

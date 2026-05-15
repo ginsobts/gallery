@@ -520,6 +520,73 @@ public class RuntimeSceneSettingsPanel : MonoBehaviour
             RuntimeUIHelper.Label(content, "当前: " + data.playerMediaFile, 10);
         else
             RuntimeUIHelper.Label(content, "当前: 默认", 10);
+
+        RuntimeUIHelper.Spacer(content, 4);
+        RuntimeUIHelper.Section(content, "方向动画");
+        RuntimeUIHelper.FloatField(content, "帧率 (FPS)", data.playerAnimFps, v => { data.playerAnimFps = Mathf.Max(0.1f, v); ApplyPlayerAnimFps(v); });
+
+        BuildDirFrameRow("行走-上", data.playerWalkUpFiles, files => { data.playerWalkUpFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("行走-下", data.playerWalkDownFiles, files => { data.playerWalkDownFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("行走-左", data.playerWalkLeftFiles, files => { data.playerWalkLeftFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("行走-右", data.playerWalkRightFiles, files => { data.playerWalkRightFiles = files; ApplyPlayerDirFrames(); });
+        RuntimeUIHelper.Spacer(content, 2);
+        BuildDirFrameRow("待机-上", data.playerIdleUpFiles, files => { data.playerIdleUpFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("待机-下", data.playerIdleDownFiles, files => { data.playerIdleDownFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("待机-左", data.playerIdleLeftFiles, files => { data.playerIdleLeftFiles = files; ApplyPlayerDirFrames(); });
+        BuildDirFrameRow("待机-右", data.playerIdleRightFiles, files => { data.playerIdleRightFiles = files; ApplyPlayerDirFrames(); });
+    }
+
+    private void BuildDirFrameRow(string label, string[] currentFiles, System.Action<string[]> onChanged)
+    {
+        int count = currentFiles != null ? currentFiles.Length : 0;
+        RuntimeUIHelper.Btn(content, label + " [" + count + "帧]  选择", () =>
+        {
+            string[] paths = NativeFilePicker.PickMultipleImageFiles("选择" + label + "帧（多选）");
+            if (paths == null || paths.Length == 0) return;
+            var editor = RuntimeEditor.Instance;
+            if (editor == null) return;
+            var relFiles = new string[paths.Length];
+            for (int i = 0; i < paths.Length; i++)
+                relFiles[i] = RuntimeAssetLoader.Instance.CopyMediaToScene(paths[i], editor.CurrentSceneName);
+            onChanged(relFiles);
+            editor.SetStatus(label + ": 已设置 " + relFiles.Length + " 帧");
+            BuildContent();
+        }, count > 0 ? RuntimeUIHelper.AccentGreen : RuntimeUIHelper.BtnNormal);
+    }
+
+    private void ApplyPlayerAnimFps(float fps)
+    {
+        if (GalleryPlayer.Instance == null) return;
+        var da = GalleryPlayer.Instance.GetComponent<DirectionalAnimator>();
+        if (da != null) da.SetFPS(fps);
+    }
+
+    private void ApplyPlayerDirFrames()
+    {
+        if (GalleryPlayer.Instance == null) return;
+        var da = GalleryPlayer.Instance.GetComponent<DirectionalAnimator>();
+        if (da == null) return;
+        var editor = RuntimeEditor.Instance;
+        if (editor == null) return;
+        string scene = editor.CurrentSceneName;
+
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Up, true, data.playerWalkUpFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Down, true, data.playerWalkDownFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Left, true, data.playerWalkLeftFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Right, true, data.playerWalkRightFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Up, false, data.playerIdleUpFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Down, false, data.playerIdleDownFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Left, false, data.playerIdleLeftFiles, scene);
+        ApplyDirFrameSet(da, DirectionalAnimator.Direction.Right, false, data.playerIdleRightFiles, scene);
+    }
+
+    private void ApplyDirFrameSet(DirectionalAnimator da, DirectionalAnimator.Direction dir, bool walk, string[] files, string scene)
+    {
+        if (files == null || files.Length == 0) { da.SetFrames(dir, walk, null); return; }
+        var sprites = new Sprite[files.Length];
+        for (int i = 0; i < files.Length; i++)
+            sprites[i] = RuntimeAssetLoader.Instance.LoadSpriteFromScene(scene, files[i]);
+        da.SetFrames(dir, walk, sprites);
     }
 
     private void ApplyPlayerSprite(string sceneName, string mediaFile)

@@ -17,6 +17,8 @@ public class RuntimeElementHandle : MonoBehaviour
     private CanvasScaler cachedScaler;
     private RectTransform cachedActionBarRT;
     private SpriteRenderer cachedTargetSR;
+    private BoxCollider2D cachedTargetCol;
+    private bool isWeatherElement;
 
     private enum DragMode { None, Move, ScaleLeft, ScaleRight, ScaleTop, ScaleBottom, ScaleTL, ScaleTR, ScaleBL, ScaleBR }
     private DragMode dragMode;
@@ -47,8 +49,12 @@ public class RuntimeElementHandle : MonoBehaviour
         data = elemData;
         cam = Camera.main;
         cachedTargetSR = go != null ? go.GetComponent<SpriteRenderer>() : null;
+        cachedTargetCol = go != null ? go.GetComponent<BoxCollider2D>() : null;
+        isWeatherElement = elemData != null && elemData.type == "weather";
         if (root == null) CreateUI();
         root.SetActive(true);
+        if (actionBar != null)
+            actionBar.SetActive(elemData != null);
         UpdatePosition();
         UpdateSizeLabel();
     }
@@ -138,8 +144,17 @@ public class RuntimeElementHandle : MonoBehaviour
             {
                 data.x = target.transform.position.x;
                 data.y = target.transform.position.y;
-                data.scaleX = target.transform.localScale.x;
-                data.scaleY = target.transform.localScale.y;
+                if (isWeatherElement && cachedTargetCol != null)
+                {
+                    if (data.weather == null) data.weather = new WeatherData();
+                    data.weather.sizeX = cachedTargetCol.size.x;
+                    data.weather.sizeY = cachedTargetCol.size.y;
+                }
+                else
+                {
+                    data.scaleX = target.transform.localScale.x;
+                    data.scaleY = target.transform.localScale.y;
+                }
             }
             dragMode = DragMode.None;
         }
@@ -148,8 +163,17 @@ public class RuntimeElementHandle : MonoBehaviour
     private void ApplyEdgeScale(Vector3 worldNow, int axisX, int axisY)
     {
         Vector3 delta = worldNow - dragStartWorldMouse;
-        Vector3 newScale = dragStartScale;
 
+        if (isWeatherElement && cachedTargetCol != null)
+        {
+            Vector2 newSize = new Vector2(dragStartScale.x, dragStartScale.y);
+            if (axisX != 0) newSize.x = Mathf.Max(0.5f, dragStartScale.x + delta.x * axisX);
+            if (axisY != 0) newSize.y = Mathf.Max(0.5f, dragStartScale.y + delta.y * axisY);
+            cachedTargetCol.size = newSize;
+            return;
+        }
+
+        Vector3 newScale = dragStartScale;
         if (axisX != 0)
         {
             float dx = delta.x * axisX;
@@ -169,21 +193,37 @@ public class RuntimeElementHandle : MonoBehaviour
     private void ApplyCornerScale(Vector3 worldNow)
     {
         Vector3 delta = worldNow - dragStartWorldMouse;
+
+        float sign;
+        switch (dragMode)
+        {
+            case DragMode.ScaleTR: sign = (delta.x + delta.y) > 0 ? 1f : -1f; break;
+            case DragMode.ScaleBL: sign = (-delta.x - delta.y) > 0 ? 1f : -1f; break;
+            case DragMode.ScaleTL: sign = (-delta.x + delta.y) > 0 ? 1f : -1f; break;
+            case DragMode.ScaleBR: sign = (delta.x - delta.y) > 0 ? 1f : -1f; break;
+            default: sign = 1f; break;
+        }
+
+        if (isWeatherElement && cachedTargetCol != null)
+        {
+            float avgDist = (Mathf.Abs(delta.x) + Mathf.Abs(delta.y)) * 0.5f;
+            float factor = avgDist * sign;
+            float ratio = dragStartScale.y / Mathf.Max(0.01f, dragStartScale.x);
+            float newW = Mathf.Max(0.5f, dragStartScale.x + factor);
+            cachedTargetCol.size = new Vector2(newW, newW * ratio);
+            return;
+        }
+
         float spriteW = GetSpriteBoundsWidth();
         float spriteH = GetSpriteBoundsHeight();
-
         float dx = Mathf.Abs(delta.x) / spriteW;
         float dy = Mathf.Abs(delta.y) / spriteH;
         float avgDelta = (dx + dy) * 0.5f;
 
-        float sign = (delta.x + delta.y) > 0 ? 1f : -1f;
-        if (dragMode == DragMode.ScaleTL || dragMode == DragMode.ScaleBR)
-            sign = (-delta.x + delta.y) > 0 ? 1f : -1f;
-
-        float factor = avgDelta * sign;
-        float newUniform = Mathf.Max(0.1f, dragStartScale.x + factor);
-        float ratio = dragStartScale.y / Mathf.Max(0.001f, dragStartScale.x);
-        target.transform.localScale = new Vector3(newUniform, newUniform * ratio, 1f);
+        float factor2 = avgDelta * sign;
+        float newUniform = Mathf.Max(0.1f, dragStartScale.x + factor2);
+        float ratio2 = dragStartScale.y / Mathf.Max(0.001f, dragStartScale.x);
+        target.transform.localScale = new Vector3(newUniform, newUniform * ratio2, 1f);
     }
 
     private float GetSpriteBoundsWidth()
@@ -207,7 +247,10 @@ public class RuntimeElementHandle : MonoBehaviour
         Vector3 w = cam.ScreenToWorldPoint(Input.mousePosition);
         w.z = 0;
         dragStartWorldMouse = w;
-        dragStartScale = target.transform.localScale;
+        if (isWeatherElement && cachedTargetCol != null)
+            dragStartScale = new Vector3(cachedTargetCol.size.x, cachedTargetCol.size.y, 1f);
+        else
+            dragStartScale = target.transform.localScale;
         dragStartPos = target.transform.position;
     }
 
@@ -216,7 +259,13 @@ public class RuntimeElementHandle : MonoBehaviour
         if (target == null || cam == null || rootRT == null) return;
 
         Bounds bounds;
-        if (cachedTargetSR != null && cachedTargetSR.sprite != null)
+        if (isWeatherElement && cachedTargetCol != null)
+        {
+            Vector3 pos = target.transform.position;
+            Vector2 sz = cachedTargetCol.size;
+            bounds = new Bounds(pos, new Vector3(sz.x, sz.y, 0));
+        }
+        else if (cachedTargetSR != null && cachedTargetSR.sprite != null)
             bounds = cachedTargetSR.bounds;
         else
         {
@@ -275,8 +324,17 @@ public class RuntimeElementHandle : MonoBehaviour
     private void UpdateSizeLabel()
     {
         if (sizeLabel == null || target == null) return;
-        Vector3 s = target.transform.localScale;
-        string newText = s.x.ToString("F2") + " x " + s.y.ToString("F2");
+        string newText;
+        if (isWeatherElement && cachedTargetCol != null)
+        {
+            Vector2 sz = cachedTargetCol.size;
+            newText = sz.x.ToString("F1") + " x " + sz.y.ToString("F1");
+        }
+        else
+        {
+            Vector3 s = target.transform.localScale;
+            newText = s.x.ToString("F2") + " x " + s.y.ToString("F2");
+        }
         if (newText != lastSizeText)
         {
             lastSizeText = newText;

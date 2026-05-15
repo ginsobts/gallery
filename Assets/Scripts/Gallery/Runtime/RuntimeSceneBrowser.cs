@@ -12,6 +12,8 @@ public class RuntimeSceneBrowser : MonoBehaviour
     private InputField newSceneInput;
     private bool isOpen;
 
+    public bool IsOpen => isOpen;
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -31,6 +33,13 @@ public class RuntimeSceneBrowser : MonoBehaviour
     {
         browserCanvas.gameObject.SetActive(false);
         isOpen = false;
+    }
+
+    private void Update()
+    {
+        if (!isOpen) return;
+        if (Input.GetKeyDown(KeyCode.Escape))
+            Close();
     }
 
     private void RefreshList()
@@ -261,6 +270,11 @@ public class RuntimeSceneBrowser : MonoBehaviour
         bgRT.offsetMin = Vector2.zero; bgRT.offsetMax = Vector2.zero;
         var bgImg = bgGO.AddComponent<Image>();
         bgImg.color = new Color(0, 0, 0, 0.75f);
+        bgImg.raycastTarget = true;
+        var bgBtn = bgGO.AddComponent<Button>();
+        bgBtn.targetGraphic = bgImg;
+        bgBtn.transition = Selectable.Transition.None;
+        bgBtn.onClick.AddListener(() => Close());
 
         var panelGO = new GameObject("Panel");
         panelGO.transform.SetParent(canvasGO.transform, false);

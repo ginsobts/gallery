@@ -25,7 +25,8 @@ public class GalleryFollower : MonoBehaviour
     private Transform playerTransform;
     private SpriteRenderer sr;
     private CircleCollider2D col;
-    private FrameAnimator frameAnimator;
+    private DirectionalAnimator dirAnimator;
+    private Vector3 prevPos;
 
     private const int MaxHistory = 500;
     private Vector3[] historyBuffer = new Vector3[MaxHistory];
@@ -73,15 +74,18 @@ public class GalleryFollower : MonoBehaviour
 
     private void Start()
     {
-        if (walkFrames != null && walkFrames.Length > 0)
-        {
-            frameAnimator = GetComponent<FrameAnimator>();
-            if (frameAnimator == null)
-                frameAnimator = gameObject.AddComponent<FrameAnimator>();
-            frameAnimator.FPS = animFps;
-            frameAnimator.SetFramesAndPlay(walkFrames);
-            frameAnimator.Pause();
-        }
+        dirAnimator = GetComponent<DirectionalAnimator>();
+        if (dirAnimator == null)
+            dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
+
+        if (walkFrames != null && walkFrames.Length > 0 && !dirAnimator.HasAnyFrames())
+            dirAnimator.SetFrames(DirectionalAnimator.Direction.Down, true, walkFrames);
+
+        dirAnimator.SetFPS(animFps);
+        dirAnimator.SetDirection(DirectionalAnimator.Direction.Down);
+        dirAnimator.SetWalking(false);
+
+        prevPos = transform.position;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -98,9 +102,6 @@ public class GalleryFollower : MonoBehaviour
         lastRecordedPos = playerTransform.position;
 
         col.enabled = false;
-
-        if (frameAnimator != null)
-            frameAnimator.Resume();
     }
 
     private void Update()
@@ -109,6 +110,7 @@ public class GalleryFollower : MonoBehaviour
 
         RecordPlayerPosition();
         FollowPath();
+        UpdateDirectionalAnimation();
     }
 
     private Vector3 HistoryAt(int logicalIndex)
@@ -172,23 +174,70 @@ public class GalleryFollower : MonoBehaviour
 
     public string ElementId { get; set; }
 
+    public Sprite DefaultSprite => npcSprite;
+
     public void SetSprite(Sprite sprite)
     {
         npcSprite = sprite;
         if (sr != null) sr.sprite = sprite;
     }
 
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (npcSprite != null)
+        {
+            var spriteRenderer = GetComponent<SpriteRenderer>();
+            if (spriteRenderer != null) spriteRenderer.sprite = npcSprite;
+        }
+    }
+#endif
+
     public void SetWalkFrames(Sprite[] frames, float fps = 6f)
     {
         walkFrames = frames;
         animFps = fps;
-        if (frames != null && frames.Length > 0)
+        if (dirAnimator == null)
         {
-            if (frameAnimator == null) frameAnimator = gameObject.AddComponent<FrameAnimator>();
-            frameAnimator.FPS = fps;
-            frameAnimator.SetFramesAndPlay(frames);
-            if (!isFollowing) frameAnimator.Pause();
+            dirAnimator = GetComponent<DirectionalAnimator>();
+            if (dirAnimator == null)
+                dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
         }
+        if (frames != null && frames.Length > 0)
+            dirAnimator.SetFrames(DirectionalAnimator.Direction.Down, true, frames);
+        dirAnimator.SetFPS(fps);
+    }
+
+    public DirectionalAnimator GetDirectionalAnimator()
+    {
+        if (dirAnimator == null)
+        {
+            dirAnimator = GetComponent<DirectionalAnimator>();
+            if (dirAnimator == null)
+                dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
+        }
+        return dirAnimator;
+    }
+
+    private void UpdateDirectionalAnimation()
+    {
+        if (dirAnimator == null) return;
+
+        Vector3 delta = transform.position - prevPos;
+        prevPos = transform.position;
+        float sqrMag = delta.sqrMagnitude;
+        bool moving = sqrMag > 0.0001f;
+
+        if (moving)
+        {
+            DirectionalAnimator.Direction dir;
+            if (Mathf.Abs(delta.x) >= Mathf.Abs(delta.y))
+                dir = delta.x > 0 ? DirectionalAnimator.Direction.Right : DirectionalAnimator.Direction.Left;
+            else
+                dir = delta.y > 0 ? DirectionalAnimator.Direction.Up : DirectionalAnimator.Direction.Down;
+            dirAnimator.SetDirection(dir);
+        }
+        dirAnimator.SetWalking(moving);
     }
 
     public void SetFollowParams(float distance, float speed, float interval)

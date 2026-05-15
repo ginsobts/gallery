@@ -26,16 +26,17 @@ public class GalleryPlayer : MonoBehaviour
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
     private Vector2 moveInput;
-    private FrameAnimator frameAnimator;
+    private DirectionalAnimator dirAnimator;
 
     [Header("Animation")]
-    [Tooltip("行走帧动画序列（留空则无动画）")]
+    [Tooltip("行走帧动画序列（留空则无动画，仅作为向下行走的后备帧）")]
     [SerializeField] private Sprite[] walkFrames;
     [Tooltip("帧动画速度")]
     [SerializeField] private float animFps = 6f;
 
     private bool wasMoving;
     private Vector3 lastKnownPos;
+    private DirectionalAnimator.Direction lastDirection = DirectionalAnimator.Direction.Down;
 
     private void Awake()
     {
@@ -63,15 +64,16 @@ public class GalleryPlayer : MonoBehaviour
 
     private void Start()
     {
-        if (walkFrames != null && walkFrames.Length > 0)
-        {
-            frameAnimator = GetComponent<FrameAnimator>();
-            if (frameAnimator == null)
-                frameAnimator = gameObject.AddComponent<FrameAnimator>();
-            frameAnimator.FPS = animFps;
-            frameAnimator.SetFramesAndPlay(walkFrames);
-            frameAnimator.Pause();
-        }
+        dirAnimator = GetComponent<DirectionalAnimator>();
+        if (dirAnimator == null)
+            dirAnimator = gameObject.AddComponent<DirectionalAnimator>();
+
+        if (walkFrames != null && walkFrames.Length > 0 && !dirAnimator.HasAnyFrames())
+            dirAnimator.SetFrames(DirectionalAnimator.Direction.Down, true, walkFrames);
+
+        dirAnimator.SetFPS(animFps);
+        dirAnimator.SetDirection(DirectionalAnimator.Direction.Down);
+        dirAnimator.SetWalking(false);
     }
 
     private void OnDestroy()
@@ -93,15 +95,7 @@ public class GalleryPlayer : MonoBehaviour
     private void Update()
     {
         moveInput = Vector2.zero;
-        if (FreezeMovement)
-        {
-            if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.A) ||
-                Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.D))
-            {
-                Debug.LogWarning($"[GalleryPlayer] Movement blocked! freezeCount={freezeCount}");
-            }
-            return;
-        }
+        if (FreezeMovement) return;
         if (Input.GetKey(KeyCode.W)) moveInput.y += 1;
         if (Input.GetKey(KeyCode.S)) moveInput.y -= 1;
         if (Input.GetKey(KeyCode.A)) moveInput.x -= 1;
@@ -126,10 +120,21 @@ public class GalleryPlayer : MonoBehaviour
         lastKnownPos = transform.position;
 
         bool moving = moveInput != Vector2.zero;
-        if (frameAnimator != null)
+
+        if (moving)
         {
-            if (moving && !wasMoving) frameAnimator.Resume();
-            else if (!moving && wasMoving) frameAnimator.Pause();
+            DirectionalAnimator.Direction dir = lastDirection;
+            if (Mathf.Abs(moveInput.x) >= Mathf.Abs(moveInput.y))
+                dir = moveInput.x > 0 ? DirectionalAnimator.Direction.Right : DirectionalAnimator.Direction.Left;
+            else
+                dir = moveInput.y > 0 ? DirectionalAnimator.Direction.Up : DirectionalAnimator.Direction.Down;
+            lastDirection = dir;
+        }
+
+        if (dirAnimator != null)
+        {
+            dirAnimator.SetDirection(lastDirection);
+            dirAnimator.SetWalking(moving);
         }
         wasMoving = moving;
     }

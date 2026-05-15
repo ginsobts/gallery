@@ -120,6 +120,10 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
         RuntimeUIHelper.Spacer(content, 4);
         BuildBGMUI();
 
+        RuntimeUIHelper.Spacer(content, 4);
+        RuntimeUIHelper.Section(content, "NPC跟随");
+        RuntimeUIHelper.ToggleField(content, "进入此区块时遣散跟随者", blockData.dismissFollowers, v => blockData.dismissFollowers = v);
+
         RuntimeUIHelper.Spacer(content, 6);
         if (sceneData.cameraBlockCount > 1)
             BuildCopySection();
@@ -312,6 +316,7 @@ public class RuntimeBlockSettingsPanel : MonoBehaviour
         dst.bgmFile = src.bgmFile;
         dst.bgmVolume = src.bgmVolume;
         dst.bgmFadeTime = src.bgmFadeTime;
+        dst.dismissFollowers = src.dismissFollowers;
         dst.blockIndex = savedIndex;
     }
 

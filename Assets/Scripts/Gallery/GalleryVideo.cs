@@ -65,6 +65,7 @@ public class GalleryVideo : MonoBehaviour
     private GameObject effectPromptGO;
     private bool approachEffectTriggered;
     private AudioSource effectAudioSrc;
+    private string pendingVideoUrl;
 
     private void Awake()
     {
@@ -130,6 +131,13 @@ public class GalleryVideo : MonoBehaviour
         {
             videoPlayer.source = VideoSource.VideoClip;
             videoPlayer.clip = videoClip;
+        }
+
+        if (!string.IsNullOrEmpty(pendingVideoUrl))
+        {
+            videoPlayer.source = VideoSource.Url;
+            videoPlayer.url = pendingVideoUrl;
+            pendingVideoUrl = null;
         }
 
         videoPlayer.prepareCompleted += OnVideoPrepared;
@@ -522,7 +530,11 @@ public class GalleryVideo : MonoBehaviour
 
     public void SetVideoUrl(string url)
     {
-        if (videoPlayer == null) return;
+        if (videoPlayer == null)
+        {
+            pendingVideoUrl = url;
+            return;
+        }
         videoPlayer.source = UnityEngine.Video.VideoSource.Url;
         videoPlayer.url = url;
         videoPlayer.Stop();

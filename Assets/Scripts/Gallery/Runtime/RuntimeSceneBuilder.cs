@@ -3,6 +3,15 @@ using UnityEngine;
 
 public class RuntimeSceneBuilder : MonoBehaviour
 {
+    private Sprite npcDialogueDefaultSprite;
+    private Sprite npcFollowerDefaultSprite;
+
+    public void SetNPCDefaults(Sprite dialogueSprite, Sprite followerSprite)
+    {
+        npcDialogueDefaultSprite = dialogueSprite;
+        npcFollowerDefaultSprite = followerSprite;
+    }
+
     private string currentSceneName;
     private List<GameObject> spawnedElements = new List<GameObject>();
     private Dictionary<string, GameObject> elementMap = new Dictionary<string, GameObject>();
@@ -75,6 +84,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
             if (go != null) Destroy(go);
         spawnedElements.Clear();
         elementMap.Clear();
+        if (backgroundGO != null) { Destroy(backgroundGO); backgroundGO = null; }
         RuntimeAssetLoader.Instance.ClearCache();
     }
 
@@ -137,12 +147,38 @@ public class RuntimeSceneBuilder : MonoBehaviour
                     if (sr != null) sr.sprite = playerSprite;
                 }
             }
+            ApplyPlayerDirectionalFrames(player, s);
         }
 
         ApplyBackgroundImage(s);
         ApplyCameraSettings(s);
         ApplyTimeline(s);
         ApplyBlockSettingsManager(s);
+    }
+
+    private void ApplyPlayerDirectionalFrames(GalleryPlayer player, SceneSettingsData s)
+    {
+        var da = player.GetComponent<DirectionalAnimator>();
+        if (da == null) return;
+
+        var loader = RuntimeAssetLoader.Instance;
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, true, s.playerWalkUpFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, true, s.playerWalkDownFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, true, s.playerWalkLeftFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, true, s.playerWalkRightFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, false, s.playerIdleUpFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, false, s.playerIdleDownFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, false, s.playerIdleLeftFiles);
+        LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, false, s.playerIdleRightFiles);
+        da.SetFPS(s.playerAnimFps > 0 ? s.playerAnimFps : 6f);
+    }
+
+    private void LoadAndSetDirFrames(DirectionalAnimator da, DirectionalAnimator.Direction dir, bool walk, string[] files)
+    {
+        if (files == null || files.Length == 0) return;
+        Sprite[] sprites = RuntimeAssetLoader.Instance.LoadSpriteArray(currentSceneName, files);
+        if (sprites != null && sprites.Length > 0)
+            da.SetFrames(dir, walk, sprites);
     }
 
     public void ApplyBlockSettingsManager(SceneSettingsData s)
@@ -162,6 +198,8 @@ public class RuntimeSceneBuilder : MonoBehaviour
         mgr.Init(s, currentSceneName);
     }
 
+    public GameObject BackgroundGO => backgroundGO;
+
     public void ApplyBackgroundImage(SceneSettingsData s)
     {
         if (backgroundGO != null) Destroy(backgroundGO);
@@ -175,7 +213,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
         sr.sprite = sprite;
         sr.sortingOrder = -1000;
         sr.color = Color.white;
-        backgroundGO.transform.position = new Vector3(0, 0, 10f);
+        backgroundGO.transform.position = new Vector3(s.backgroundX, s.backgroundY, 10f);
         backgroundGO.transform.localScale = new Vector3(s.backgroundScaleX, s.backgroundScaleY, 1f);
     }
 
@@ -271,17 +309,56 @@ public class RuntimeSceneBuilder : MonoBehaviour
 
     private GameObject SpawnElement(ElementData elem)
     {
+        if (elem.type == "npc_follower")
+            ConvertFollowerToDialogue(elem);
+
         switch (elem.type)
         {
             case "photo": return SpawnPhoto(elem);
             case "video": return SpawnVideo(elem);
             case "npc_dialogue": return SpawnNPCDialogue(elem);
-            case "npc_follower": return SpawnNPCFollower(elem);
             case "weather": return SpawnWeather(elem);
             default:
                 Debug.LogWarning($"Unknown element type: {elem.type}");
                 return null;
         }
+    }
+
+    private void ConvertFollowerToDialogue(ElementData elem)
+    {
+        elem.type = "npc_dialogue";
+        var nf = elem.npcFollower;
+        if (nf == null) nf = new NPCFollowerData();
+
+        if (elem.npcDialogue == null)
+            elem.npcDialogue = new NPCDialogueData();
+        var nd = elem.npcDialogue;
+
+        nd.canFollow = true;
+        nd.followDistance = nf.followDistance > 0 ? nf.followDistance : 1.5f;
+        nd.followSpeed = nf.followSpeed > 0 ? nf.followSpeed : 3f;
+        nd.recordInterval = nf.recordInterval;
+
+        nd.walkUpFiles = nf.walkUpFiles;
+        nd.walkDownFiles = nf.walkDownFiles;
+        nd.walkLeftFiles = nf.walkLeftFiles;
+        nd.walkRightFiles = nf.walkRightFiles;
+        nd.walkAnimFps = nf.animFps;
+        nd.idleUpFiles = nf.idleUpFiles;
+        nd.idleDownFiles = nf.idleDownFiles;
+        nd.idleLeftFiles = nf.idleLeftFiles;
+        nd.idleRightFiles = nf.idleRightFiles;
+
+        if (nf.walkFrameFiles != null && nf.walkFrameFiles.Length > 0 &&
+            (nd.walkDownFiles == null || nd.walkDownFiles.Length == 0))
+            nd.walkDownFiles = nf.walkFrameFiles;
+
+        nd.autoTrigger = true;
+
+        elem.enableApproachTrigger = true;
+        elem.approachDistance = nd.followDistance + 0.5f;
+        if (elem.approachEffects == null) elem.approachEffects = new EffectData();
+        elem.approachEffects.followPlayer = true;
     }
 
     private GameObject SpawnPhoto(ElementData elem)
@@ -315,7 +392,11 @@ public class RuntimeSceneBuilder : MonoBehaviour
         }
         else
         {
-            FitScaleToSprite(go, sprite, elem);
+            if (!elem.mediaFitted)
+            {
+                FitScaleToSprite(go, sprite, elem);
+                elem.mediaFitted = true;
+            }
         }
         frame.SwapImage(sprite, elem.caption);
 
@@ -334,6 +415,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
             SpawnPhotoWeather(go, elem);
 
         ApplyInteraction(frame, elem);
+        ApplyPushable(go, elem);
         return go;
     }
 
@@ -388,7 +470,13 @@ public class RuntimeSceneBuilder : MonoBehaviour
             {
                 Sprite cover = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.video.coverMediaFile);
                 if (cover != null)
-                    FitScaleToSprite(go, cover, elem);
+                {
+                    if (!elem.mediaFitted)
+                    {
+                        FitScaleToSprite(go, cover, elem);
+                        elem.mediaFitted = true;
+                    }
+                }
                 video.SetCoverImage(cover);
             }
         }
@@ -400,6 +488,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
         if (elem.enableApproachTrigger)
             video.SetApproachEffects(true, elem.approachDistance, elem.approachOnlyOnce, BuildEffectSet(elem.approachEffects));
 
+        ApplyPushable(go, elem);
         return go;
     }
 
@@ -410,8 +499,11 @@ public class RuntimeSceneBuilder : MonoBehaviour
         go.transform.localScale = new Vector3(elem.scaleX, elem.scaleY, 1f);
 
         var sr = go.AddComponent<SpriteRenderer>();
-        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.mediaFile);
+        Sprite sprite = null;
+        if (!string.IsNullOrEmpty(elem.mediaFile))
+            sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.mediaFile);
         if (sprite != null) sr.sprite = sprite;
+        else if (npcDialogueDefaultSprite != null) sr.sprite = npcDialogueDefaultSprite;
         else sr.sprite = RuntimeSprite.Get();
         sr.sortingOrder = elem.sortingOrder;
 
@@ -433,11 +525,33 @@ public class RuntimeSceneBuilder : MonoBehaviour
             npc.SetBubbleStyle(SceneDataHelper.ToColor(nd.bubbleColor), SceneDataHelper.ToColor(nd.textColor), nd.textSize, nd.typeSpeed);
         }
 
+        if (elem.npcDialogue != null)
+        {
+            var nd = elem.npcDialogue;
+            var da = npc.GetDirectionalAnimator();
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, false, nd.idleUpFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, false, nd.idleDownFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, false, nd.idleLeftFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, false, nd.idleRightFiles);
+            da.SetFPS(nd.idleAnimFps > 0 ? nd.idleAnimFps : 4f);
+
+            if (nd.canFollow)
+            {
+                npc.SetFollowParams(true, nd.followDistance, nd.followSpeed, nd.recordInterval);
+                LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, true, nd.walkUpFiles);
+                LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, true, nd.walkDownFiles);
+                LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, true, nd.walkLeftFiles);
+                LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, true, nd.walkRightFiles);
+                if (nd.walkAnimFps > 0) da.SetFPS(nd.walkAnimFps);
+            }
+        }
+
         if (elem.enableKeyInteract)
             npc.SetKeyEffects(true, ParseKeyCode(elem.interactKey), elem.interactDistance, BuildEffectSet(elem.keyEffects));
         if (elem.enableApproachTrigger)
             npc.SetApproachEffects(true, elem.approachDistance, elem.approachOnlyOnce, BuildEffectSet(elem.approachEffects));
 
+        ApplyPushable(go, elem);
         return go;
     }
 
@@ -452,18 +566,35 @@ public class RuntimeSceneBuilder : MonoBehaviour
         var follower = go.AddComponent<GalleryFollower>();
         follower.ElementId = elem.id;
 
-        Sprite sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.mediaFile);
+        Sprite sprite = null;
+        if (!string.IsNullOrEmpty(elem.mediaFile))
+            sprite = RuntimeAssetLoader.Instance.LoadSpriteFromScene(currentSceneName, elem.mediaFile);
         if (sprite != null) follower.SetSprite(sprite);
+        else if (npcFollowerDefaultSprite != null) follower.SetSprite(npcFollowerDefaultSprite);
 
         if (elem.npcFollower != null)
         {
             var nf = elem.npcFollower;
             follower.SetFollowParams(nf.followDistance, nf.followSpeed, nf.recordInterval);
+
+            // Legacy single-direction walk frames
             if (nf.walkFrameFiles != null && nf.walkFrameFiles.Length > 0)
             {
                 Sprite[] frames = RuntimeAssetLoader.Instance.LoadSpriteArray(currentSceneName, nf.walkFrameFiles);
                 follower.SetWalkFrames(frames, nf.animFps);
             }
+
+            // Directional frames
+            var da = follower.GetDirectionalAnimator();
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, true, nf.walkUpFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, true, nf.walkDownFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, true, nf.walkLeftFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, true, nf.walkRightFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Up, false, nf.idleUpFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Down, false, nf.idleDownFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Left, false, nf.idleLeftFiles);
+            LoadAndSetDirFrames(da, DirectionalAnimator.Direction.Right, false, nf.idleRightFiles);
+            da.SetFPS(nf.animFps > 0 ? nf.animFps : 6f);
         }
 
         return go;
@@ -485,7 +616,8 @@ public class RuntimeSceneBuilder : MonoBehaviour
             weather.SetWeather(
                 (GalleryWeather.WeatherType)elem.weather.weatherType,
                 elem.weather.particleCount,
-                SceneDataHelper.ToColor(elem.weather.particleColor));
+                SceneDataHelper.ToColor(elem.weather.particleColor),
+                elem.weather.intensity);
         }
 
         return go;
@@ -523,6 +655,21 @@ public class RuntimeSceneBuilder : MonoBehaviour
             frame.SetApproachTrigger(true, elem.approachDistance, elem.approachOnlyOnce, BuildEffectSet(elem.approachEffects));
     }
 
+    private void ApplyPushable(GameObject go, ElementData elem)
+    {
+        if (!elem.pushable) return;
+        var rb = go.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = go.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = 0f;
+        rb.freezeRotation = true;
+        rb.drag = elem.pushFriction;
+        rb.mass = 1f;
+        var col = go.GetComponent<BoxCollider2D>();
+        if (col == null) col = go.AddComponent<BoxCollider2D>();
+        col.isTrigger = false;
+    }
+
     private FrameEffectSet BuildEffectSet(EffectData data)
     {
         if (data == null) return new FrameEffectSet();
@@ -549,6 +696,7 @@ public class RuntimeSceneBuilder : MonoBehaviour
         fx.sceneName = data.sceneName;
         fx.toggleObject = data.toggleObject;
         fx.objectShow = data.objectShow;
+        fx.followPlayer = data.followPlayer;
         return fx;
     }
 

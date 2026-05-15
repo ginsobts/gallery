@@ -1,9 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public static class RuntimeSprite
 {
     private static Sprite _fallback;
-    private static Sprite _circle;
+    private static Dictionary<int, Sprite> _circles = new Dictionary<int, Sprite>();
 
     public static Sprite Get()
     {
@@ -20,7 +21,7 @@ public static class RuntimeSprite
 
     public static Sprite GetCircle(int resolution = 32)
     {
-        if (_circle != null) return _circle;
+        if (_circles.TryGetValue(resolution, out var cached) && cached != null) return cached;
         int size = resolution;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
@@ -36,8 +37,9 @@ public static class RuntimeSprite
             }
         }
         tex.Apply();
-        _circle = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
-        _circle.name = "RuntimeCircle";
-        return _circle;
+        var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
+        sprite.name = "RuntimeCircle_" + size;
+        _circles[resolution] = sprite;
+        return sprite;
     }
 }

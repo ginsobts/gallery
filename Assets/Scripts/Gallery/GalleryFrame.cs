@@ -49,6 +49,9 @@ public class FrameEffectSet
     public bool toggleObject = false;
     public GameObject targetObject;
     public bool objectShow = true;
+
+    [Tooltip("跟随玩家（仅NPC）")]
+    public bool followPlayer = false;
 }
 
 [RequireComponent(typeof(SpriteRenderer))]
